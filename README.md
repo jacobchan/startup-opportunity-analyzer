@@ -85,11 +85,14 @@ python -m examples.analyze_ai_agent
 python -m examples.analyze_saas
 ```
 
+- 启动agent大军，开始干活：
+![alt text](image-3.png)
+
 ### 方式二：自定义分析
 
 ```bash
 # 命令行直接指定方向
-python src/crew.py "你的创业方向描述"
+python -m src.crew "你的创业方向描述"
 
 # 或在代码中调用
 from src.crew import run_analysis
