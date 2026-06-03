@@ -8,7 +8,6 @@
 4. 战略顾问（Manager） → 综合研判，输出最终报告
 """
 
-import os
 import yaml
 from pathlib import Path
 from crewai import Agent, Task, Crew, Process, LLM
@@ -29,7 +28,7 @@ def get_llm() -> LLM:
     """根据配置创建LLM实例，支持DeepSeek和Claude"""
     if "deepseek" in LLM_MODEL:
         return LLM(
-            model="deepseek-v4-pro",
+            model=LLM_MODEL,
             api_key=DEEPSEEK_API_KEY,
             base_url=DEEPSEEK_BASE_URL,
         )
@@ -77,39 +76,44 @@ def create_agents() -> dict[str, Agent]:
 
 
 def create_tasks(agents: dict[str, Agent], startup_idea: str) -> list[Task]:
-    """创建4个Task，注入创业方向参数"""
+    """创建4个Task，注入创业方向参数
+
+    agents 只包含 3 个 worker agent（不含 strategy_advisor）。
+    strategy_report 不指定 agent，由 manager（strategy_advisor）直接执行。
+    """
     tasks_config = load_yaml("tasks.yaml")
 
-    return [
-        Task(
-            description=tasks_config["market_analysis"]["description"].format(
-                startup_idea=startup_idea
-            ),
-            expected_output=tasks_config["market_analysis"]["expected_output"],
-            agent=agents["market_analyst"],
+    market_task = Task(
+        description=tasks_config["market_analysis"]["description"].format(
+            startup_idea=startup_idea
         ),
-        Task(
-            description=tasks_config["competitor_analysis"]["description"].format(
-                startup_idea=startup_idea
-            ),
-            expected_output=tasks_config["competitor_analysis"]["expected_output"],
-            agent=agents["competitor_researcher"],
+        expected_output=tasks_config["market_analysis"]["expected_output"],
+        agent=agents["market_analyst"],
+    )
+    competitor_task = Task(
+        description=tasks_config["competitor_analysis"]["description"].format(
+            startup_idea=startup_idea
         ),
-        Task(
-            description=tasks_config["risk_review"]["description"].format(
-                startup_idea=startup_idea
-            ),
-            expected_output=tasks_config["risk_review"]["expected_output"],
-            agent=agents["risk_reviewer"],
+        expected_output=tasks_config["competitor_analysis"]["expected_output"],
+        agent=agents["competitor_researcher"],
+    )
+    risk_task = Task(
+        description=tasks_config["risk_review"]["description"].format(
+            startup_idea=startup_idea
         ),
-        Task(
-            description=tasks_config["strategy_report"]["description"].format(
-                startup_idea=startup_idea
-            ),
-            expected_output=tasks_config["strategy_report"]["expected_output"],
-            agent=agents["strategy_advisor"],
+        expected_output=tasks_config["risk_review"]["expected_output"],
+        agent=agents["risk_reviewer"],
+        context=[market_task, competitor_task],
+    )
+    strategy_task = Task(
+        description=tasks_config["strategy_report"]["description"].format(
+            startup_idea=startup_idea
         ),
-    ]
+        expected_output=tasks_config["strategy_report"]["expected_output"],
+        context=[market_task, competitor_task, risk_task],
+    )
+
+    return [market_task, competitor_task, risk_task, strategy_task]
 
 
 def run_analysis(startup_idea: str, save_to: str | None = None) -> str:
@@ -123,15 +127,15 @@ def run_analysis(startup_idea: str, save_to: str | None = None) -> str:
     Returns:
         完整的分析报告（Markdown格式）
     """
-    agents = create_agents()
-    tasks = create_tasks(agents, startup_idea)
-    llm = get_llm()
+    all_agents = create_agents()
+    manager = all_agents.pop("strategy_advisor")
+    tasks = create_tasks(all_agents, startup_idea)
 
     crew = Crew(
-        agents=list(agents.values()),
+        agents=list(all_agents.values()),
         tasks=tasks,
         process=Process.hierarchical,
-        manager_llm=llm,
+        manager_agent=manager,
         verbose=True,
     )
 

@@ -9,20 +9,27 @@ LLM本次项目采用的deepseek-v4-pro，整体输出质量还不错。
 ## 架构
 
 ```
-┌──────────────────────────────────────────────┐
-│          Crew (Hierarchical Process)          │
-│                                              │
-│  ┌──────────┐   ┌──────────┐   ┌──────────┐ │
-│  │ 市场分析  │   │ 竞品调研  │   │ 风险评审  │ │
-│  │  Agent   │ → │  Agent   │ → │  Agent   │ │
-│  └──────────┘   └──────────┘   └──────────┘ │
-│       ↓              ↓              ↓        │
-│  ┌───────────────────────────────────────┐   │
-│  │     综合研判 Agent (Manager)           │   │
-│  │  输出：结构化创业机会评估报告           │   │
-│  │  结论：Go / No-Go / Conditional-Go    │   │
-│  └───────────────────────────────────────┘   │
-└──────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────┐
+│          Crew (Hierarchical Process)              │
+│                                                  │
+│  ┌──────────┐   ┌──────────┐                     │
+│  │ 市场分析  │   │ 竞品调研  │   （独立分析，无依赖）│
+│  │  Agent   │   │  Agent   │                     │
+│  └────┬─────┘   └────┬─────┘                     │
+│       │              │                           │
+│       └──────┬───────┘                           │
+│              ↓ context=[mkt, comp]               │
+│  ┌──────────────────┐                            │
+│  │   风险评审 Agent   │                           │
+│  └────────┬─────────┘                            │
+│           ↓                                      │
+│  ┌────────────────────────────────────────┐      │
+│  │  strategy_advisor (manager_agent)       │      │
+│  │  综合研判 → 输出结构化创业机会评估报告    │      │
+│  │  context=[mkt, comp, risk]              │      │
+│  │  结论：Go / No-Go / Conditional-Go      │      │
+│  └────────────────────────────────────────┘      │
+└──────────────────────────────────────────────────┘
 ```
 
 ## 技术栈
@@ -96,17 +103,22 @@ report = run_analysis(
 ### 方式三：作为模块集成，你完全可以用AI快速Gen一个帅气的UI界面（例如React），然后让它成为人机交互的界面。
 
 ```python
-from src.crew import create_agents, create_tasks, run_analysis
+from src.crew import create_agents, create_tasks
 
-# 只创建Agent，自定义Crew配置
-agents = create_agents()
-tasks = create_tasks(agents, "你的创业方向")
+# 创建所有 Agent（含 strategy_advisor）
+all_agents = create_agents()
 
+# 分离 manager 和 worker
+manager = all_agents.pop("strategy_advisor")
+tasks = create_tasks(all_agents, "你的创业方向")
+
+# hierarchical 模式：strategy_advisor 作为 manager_agent 协调调度
 from crewai import Crew, Process
 crew = Crew(
-    agents=list(agents.values()),
+    agents=list(all_agents.values()),  # 3 个 worker
     tasks=tasks,
-    process=Process.sequential,  # 可切换为sequential模式
+    process=Process.hierarchical,
+    manager_agent=manager,             # manager 由 strategy_advisor 担任
 )
 result = crew.kickoff()
 ```
@@ -133,7 +145,7 @@ startup-opportunity-analyzer/
 ├── pyproject.toml
 ├── .env.example
 ├── src/
-│   ├── crew.py              # Crew定义 & 执行入口
+│   ├── crew.py              # Crew定义、Manager/Worker分离、执行入口
 │   ├── config/
 │   │   ├── agents.yaml      # Agent角色配置
 │   │   ├── tasks.yaml       # Task定义（支持参数注入）

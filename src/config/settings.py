@@ -4,7 +4,7 @@ import os
 load_dotenv()
 
 # LLM Configuration
-# 支持切换：deepseek-v4 / anthropic/claude-sonnet-4-6
+# 支持切换：deepseek-v4-pro | anthropic/claude-sonnet-4-6
 LLM_MODEL = os.getenv("LLM_MODEL", "deepseek-v4-pro")
 
 # DeepSeek API（OpenAI兼容格式）
