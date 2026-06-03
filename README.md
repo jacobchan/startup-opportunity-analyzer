@@ -52,7 +52,7 @@ LLM本次项目采用的deepseek-v4-pro，整体输出质量还不错。
 
 ```bash
 # 1. 克隆项目
-git clone https://github.com/your-username/startup-opportunity-analyzer.git
+git clone https://github.com/jacobchan/startup-opportunity-analyzer.git
 cd startup-opportunity-analyzer
 
 # 2. 安装依赖
@@ -161,4 +161,5 @@ pytest tests/
 
 ## License
 
-架构师创业笔记（Personal,xiaohongshu同名），有兴趣一起玩智能体可以email联系我（`jacobchan5519@gmail.com`）
+架构师创业笔记（Personal,xiaohongshu同名），有兴趣一起合作开发智能体的同伴，可以email随时联系我（`jacobchan5519@gmail.com`）
+欢迎交流~~
