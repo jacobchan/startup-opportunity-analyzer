@@ -43,21 +43,28 @@ def test_tasks_config_loads():
         assert "{startup_idea}" in task["description"], f"{name} missing startup_idea placeholder"
 
 
-def test_agent_creation():
-    """验证Agent对象能正确创建"""
-    from src.crew import create_agents
+def test_crew_class_creation():
+    """验证StartupAnalyzerCrew类能正确实例化，agents和tasks配置加载"""
+    from src.crew import StartupAnalyzerCrew
 
-    agents = create_agents()
-    assert len(agents) == 4
-    assert all(name in agents for name in [
-        "market_analyst", "competitor_researcher", "risk_reviewer", "strategy_advisor"
-    ])
+    analyzer = StartupAnalyzerCrew()
+    assert analyzer.agents_config is not None
+    assert analyzer.tasks_config is not None
+    assert "market_analyst" in analyzer.agents_config
+    assert "strategy_advisor" in analyzer.agents_config
+    assert "market_analysis" in analyzer.tasks_config
+    assert "strategy_report" in analyzer.tasks_config
 
 
-def test_task_creation():
-    """验证Task对象能正确创建"""
-    from src.crew import create_tasks, create_agents
+def test_crew_builds():
+    """验证crew()能正确构建Crew对象"""
+    from src.crew import StartupAnalyzerCrew
+    from crewai import Crew, Process
 
-    agents = create_agents()
-    tasks = create_tasks(agents, "测试创业方向")
-    assert len(tasks) == 4
+    analyzer = StartupAnalyzerCrew()
+    crew = analyzer.crew()
+
+    assert isinstance(crew, Crew)
+    assert crew.process == Process.hierarchical
+    assert len(crew.tasks) == 4
+    assert crew.manager_agent is not None
