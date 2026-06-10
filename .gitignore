@@ -11,3 +11,4 @@ venv/
 output/
 !examples/output/
 .DS_Store
+docs

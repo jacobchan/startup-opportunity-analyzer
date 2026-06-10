@@ -44,6 +44,9 @@ cd startup-opportunity-analyzer
 # 2. 安装依赖
 pip install -e ".[dev]"
 
+# 2.1 激活环境（MacOS）
+source .venv/bin/activate
+
 # 3. 配置API Key
 cp .env.example .env
 # 编辑 .env，填入你的 API Key

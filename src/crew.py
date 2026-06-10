@@ -1,13 +1,15 @@
 """
 创业机会分析智能体 - Crew定义
 
-基于CrewAI的hierarchical process，4个Agent协作完成创业机会评估：
-1. 市场分析师 → 市场规模、增长趋势、用户画像
-2. 竞品调研员 → 竞品分析、差异化机会
-3. 风险评审员 → 多维度风险评估
-4. 战略顾问（Manager） → 综合研判，输出最终报告
+基于CrewAI的hierarchical process，5个Agent协作完成创业机会评估：
+1. 市场分析师 → TAM/SAM/SOM、增长趋势、用户画像 → JSON
+2. 竞品调研员 → 竞品分析、差异化机会 → JSON
+3. 财务分析师 → LTV/CAC模型、定价策略、资金需求 → JSON
+4. 风险评审员 → 多维度风险评估 → JSON
+5. 战略顾问（Manager） → 综合研判，输出最终报告 → JSON
 """
 
+import json
 from pathlib import Path
 from typing import List
 
@@ -18,6 +20,22 @@ from crewai.project import CrewBase, agent, task, crew, before_kickoff, after_ki
 from src.tools.search_tool import search_tool
 from src.tools.web_scraper import scrape_tool
 from src.config.settings import LLM_MODEL, DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL
+
+
+def _extract_json(text: str) -> str:
+    """从LLM输出中提取JSON内容（处理markdown代码块包裹等情况）"""
+    text = text.strip()
+    if text.startswith("```"):
+        lines = text.split("\n")
+        # 去掉首尾的```行
+        start = 1
+        end = len(lines)
+        for i in range(len(lines) - 1, -1, -1):
+            if lines[i].strip() == "```":
+                end = i
+                break
+        text = "\n".join(lines[start:end])
+    return text.strip()
 
 
 def _get_llm() -> LLM:
@@ -42,7 +60,6 @@ class StartupAnalyzerCrew:
     tasks_config = "config/tasks.yaml"
 
     def __init__(self):
-        super().__init__()
         self._llm = _get_llm()
         self._startup_idea = None
         self._save_to = None
@@ -60,7 +77,7 @@ class StartupAnalyzerCrew:
         if self._save_to:
             Path(self._save_to).parent.mkdir(parents=True, exist_ok=True)
             with open(self._save_to, "w", encoding="utf-8") as f:
-                f.write(f"# 创业机会分析报告\n\n")
+                f.write("# 创业机会分析报告\n\n")
                 f.write(f"## 分析方向：{self._startup_idea}\n\n")
                 f.write(str(output.raw))
             print(f"\n报告已保存至: {self._save_to}")
@@ -79,6 +96,15 @@ class StartupAnalyzerCrew:
     def competitor_researcher(self) -> Agent:
         return Agent(
             config=self.agents_config["competitor_researcher"],
+            tools=[search_tool, scrape_tool],
+            llm=self._llm,
+            verbose=True,
+        )
+
+    @agent
+    def finance_analyst(self) -> Agent:
+        return Agent(
+            config=self.agents_config["finance_analyst"],
             tools=[search_tool, scrape_tool],
             llm=self._llm,
             verbose=True,
@@ -110,6 +136,10 @@ class StartupAnalyzerCrew:
         return Task(config=self.tasks_config["competitor_analysis"])
 
     @task
+    def finance_analysis(self) -> Task:
+        return Task(config=self.tasks_config["finance_analysis"])
+
+    @task
     def risk_review(self) -> Task:
         return Task(config=self.tasks_config["risk_review"])
 
@@ -119,19 +149,20 @@ class StartupAnalyzerCrew:
 
     @crew
     def crew(self) -> Crew:
-        # 设置任务间的context依赖
-        # Wire task context dependencies after all tasks are created
-        # self.tasks is populated by @task decorators in definition order:
-        # [market_analysis, competitor_analysis, risk_review, strategy_report]
-        market, competitor, risk, strategy = self.tasks
-        risk.context = [market, competitor]
-        strategy.context = [market, competitor, risk]
+        # self.tasks order: [market, competitor, finance, risk, strategy]
+        market, competitor, finance, risk, strategy = self.tasks
+
+        # risk depends on the 3 analysis tasks
+        risk.context = [market, competitor, finance]
+        # strategy synthesizes everything
+        strategy.context = [market, competitor, finance, risk]
 
         # strategy_advisor as manager, others as workers
         manager = self.strategy_advisor()
         worker_agents = [
             self.market_analyst(),
             self.competitor_researcher(),
+            self.finance_analyst(),
             self.risk_reviewer(),
         ]
 
@@ -153,7 +184,7 @@ def run_analysis(startup_idea: str, save_to: str | None = None) -> str:
         save_to: 报告保存路径（可选）
 
     Returns:
-        完整的分析报告（Markdown格式）
+        完整的分析报告（JSON格式）。如果LLM未严格返回JSON，则返回原始文本。
     """
     analyzer = StartupAnalyzerCrew()
     if save_to:
@@ -163,7 +194,14 @@ def run_analysis(startup_idea: str, save_to: str | None = None) -> str:
         inputs={"startup_idea": startup_idea}
     )
 
-    return result.raw
+    raw = str(result.raw)
+    cleaned = _extract_json(raw)
+
+    try:
+        parsed = json.loads(cleaned)
+        return json.dumps(parsed, indent=2, ensure_ascii=False)
+    except json.JSONDecodeError:
+        return raw
 
 
 if __name__ == "__main__":

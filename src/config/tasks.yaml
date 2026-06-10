@@ -2,65 +2,228 @@ market_analysis:
   description: >
     对以下创业方向进行深入的市场分析：{startup_idea}
 
-    请完成以下分析：
-    1. 市场规模估算（TAM/SAM/SOM），引用可查证的公开数据
-    2. 市场增长趋势（年增长率及驱动因素）
-    3. 目标用户画像（谁会买单、付费意愿、决策路径）
+    请完成以下分析，严格按照下方 expected_output 中的 JSON Schema 输出你的最终结果：
+    1. 市场规模估算（TAM/SAM/SOM），每个数据点需引用可查证的公开数据来源
+    2. 市场增长趋势（CAGR及驱动因素）
+    3. 目标用户画像（2-4个典型用户群，包含付费意愿和决策路径）
     4. 市场时机分析（为什么现在是做这件事的好时机/坏时机）
     5. 市场进入方式建议（PLG/SLG/渠道等）
   expected_output: >
-    一份结构化的市场分析报告，包含数据支撑的市场规模估算、
-    用户画像和时机判断。每个关键论点都需要有数据来源。
+    严格按以下JSON Schema输出，且必须是合法JSON。重要规则：
+    - 只输出JSON本身，不要用markdown代码块（不要```或```json）包裹
+    - 不要在JSON前后加任何解释文字
+    - 字符串值使用中文，所有字段都必须填写
+    {
+    {
+      "startup_idea": "创业方向",
+      "tam_sam_som": {
+        "tam": {"value": "数值", "source": "来源", "year": "年份"},
+        "sam": {"value": "数值", "source": "来源", "year": "年份"},
+        "som": {"value": "数值", "source": "来源", "year": "年份"}
+      },
+      "growth_trends": {
+        "cagr": "复合年增长率",
+        "drivers": ["驱动因素1", "驱动因素2"],
+        "forecast": "未来3-5年趋势预判"
+      },
+      "user_personas": [
+        {
+          "segment": "用户群名称",
+          "description": "画像描述",
+          "pain_points": ["痛点1", "痛点2"],
+          "willingness_to_pay": "高/中/低",
+          "decision_path": "决策路径"
+        }
+      ],
+      "market_timing": "时机分析",
+      "go_to_market": "进入市场方式建议",
+      "key_insights": ["核心洞察1", "核心洞察2"]
+    }
   agent: market_analyst
 
 competitor_analysis:
   description: >
     对以下创业方向进行竞品和行业分析：{startup_idea}
 
-    请完成以下分析：
+    请完成以下分析，严格按照下方 expected_output 中的 JSON Schema 输出你的最终结果：
     1. 找到至少5个直接竞品和3个间接竞品/替代方案
     2. 对每个竞品分析：商业模式、定价策略、融资阶段、核心优势、明显短板
     3. 竞争格局判断（蓝海/红海/垄断），市场集中度如何
     4. 识别竞品普遍未解决的用户痛点（差异化机会）
     5. 分析行业进入壁垒（技术、牌照、渠道、网络效应等）
   expected_output: >
-    一份竞品分析报告，包含竞品对比表格、竞争格局判断
-    和差异化机会识别。重点关注竞品的短板和未满足的需求。
+    严格按以下JSON Schema输出，且必须是合法JSON。重要规则：
+    - 只输出JSON本身，不要用markdown代码块（不要```或```json）包裹
+    - 不要在JSON前后加任何解释文字
+    - 字符串值使用中文，所有字段都必须填写
+    {
+    {
+      "startup_idea": "创业方向",
+      "competitors": [
+        {
+          "name": "竞品名称",
+          "type": "direct/indirect/substitute",
+          "business_model": "商业模式",
+          "pricing": "定价策略",
+          "funding_stage": "融资阶段",
+          "strengths": ["优势1"],
+          "weaknesses": ["短板1"]
+        }
+      ],
+      "landscape": "竞争格局（蓝海/红海/垄断）",
+      "market_concentration": "市场集中度分析",
+      "differentiation_opportunities": [
+        {
+          "opportunity": "差异化机会",
+          "evidence": "支撑依据",
+          "difficulty": "高/中/低"
+        }
+      ],
+      "entry_barriers": [
+        {
+          "barrier": "壁垒类型",
+          "description": "具体描述",
+          "level": "高/中/低"
+        }
+      ]
+    }
   agent: competitor_researcher
+
+finance_analysis:
+  description: >
+    对以下创业方向进行财务分析和LTV/CAC建模：{startup_idea}
+
+    请完成以下分析，严格按照下方 expected_output 中的 JSON Schema 输出你的最终结果：
+    1. 推荐的收入模式（SaaS订阅/交易抽佣/按量计费等）
+    2. 定价策略（2-3个定价层级，对应不同客群）
+    3. LTV分析：估算客户生命周期价值，包含ARPU、流失率等关键参数
+    4. CAC分析：估算各渠道获客成本，包含回本周期
+    5. 单位经济模型：LTV/CAC比值、毛利率、盈亏平衡点
+    6. 资金需求估算：分阶段（MVP/种子轮）的资金需求和主要支出项
+    7. 关键财务风险
+
+    所有估算需基于行业基准数据和可比公司数据，每个假设需注明来源。
+  expected_output: >
+    严格按以下JSON Schema输出，且必须是合法JSON。重要规则：
+    - 只输出JSON本身，不要用markdown代码块（不要```或```json）包裹
+    - 不要在JSON前后加任何解释文字
+    - 字符串值使用中文，所有字段都必须填写
+    {
+    {
+      "startup_idea": "创业方向",
+      "revenue_model": "推荐收入模式",
+      "pricing_strategy": [
+        {
+          "tier_name": "定价层级",
+          "price": "价格",
+          "target_segment": "目标客群",
+          "key_features": ["功能1", "功能2"]
+        }
+      ],
+      "ltv_analysis": {
+        "estimated_ltv": "客户生命周期价值",
+        "avg_contract_duration": "平均合同周期",
+        "monthly_arpu": "月均ARPU",
+        "churn_rate": "月流失率",
+        "assumptions": ["假设1"]
+      },
+      "cac_analysis": {
+        "estimated_cac": "获客成本",
+        "channels": ["渠道1"],
+        "channel_cac_breakdown": ["渠道1: xxx元"],
+        "payback_period": "回本周期",
+        "assumptions": ["假设1"]
+      },
+      "unit_economics": {
+        "ltv_cac_ratio": "LTV/CAC比值",
+        "margin": "毛利率",
+        "breakeven_units": "盈亏平衡客户数",
+        "breakeven_time": "达到盈亏平衡时间",
+        "assessment": "健康/一般/需优化"
+      },
+      "funding_requirements": [
+        {
+          "phase": "阶段",
+          "amount": "金额",
+          "duration": "覆盖周期",
+          "key_expenses": ["支出项1"]
+        }
+      ],
+      "financial_risks": ["风险1"],
+      "key_insights": ["核心洞察1"]
+    }
+  agent: finance_analyst
 
 risk_review:
   description: >
-    基于已有的市场分析和竞品分析结果，对以下创业方向进行风险评估：{startup_idea}
+    基于已有的市场分析、竞品分析和财务分析结果，对以下创业方向进行风险评估：{startup_idea}
 
-    请从以下维度逐一评估：
+    请从以下维度逐一评估并严格按照JSON Schema输出：
     1. 技术风险：技术实现难度、技术栈成熟度、是否需要AI模型训练
     2. 市场风险：市场是否真实存在、用户付费意愿是否足够、获客成本预估
     3. 团队风险：这个方向需要什么样的核心团队能力
-    4. 资金风险：启动资金需求、烧钱速度、盈亏平衡点预估
+    4. 资金风险：启动资金需求、烧钱速度、盈亏平衡点预估（参考财务分析）
     5. 政策合规风险：是否有监管不确定性
     6. 时机风险：窗口期是否合适，是否太早或太晚
 
     对每个风险给出等级（高/中/低）和具体的风险缓解措施。
   expected_output: >
-    一份风险评估报告，按维度列出风险等级、风险描述和缓解措施。
-    最后给出整体风险评级和关键风险提示。
+    严格按以下JSON Schema输出，且必须是合法JSON。重要规则：
+    - 只输出JSON本身，不要用markdown代码块（不要```或```json）包裹
+    - 不要在JSON前后加任何解释文字
+    - 字符串值使用中文，所有字段都必须填写
+    {
+    {
+      "startup_idea": "创业方向",
+      "risks": [
+        {
+          "dimension": "技术/市场/团队/资金/政策/时机",
+          "level": "高/中/低",
+          "description": "风险描述",
+          "mitigation": "缓解措施"
+        }
+      ],
+      "overall_risk_level": "高/中/低",
+      "top_risks": ["关键风险1", "关键风险2", "关键风险3"],
+      "risk_mitigation_priority": ["优先缓解项1", "优先缓解项2"]
+    }
   agent: risk_reviewer
 
 strategy_report:
   description: >
-    基于市场分析、竞品分析和风险评估的所有结论，
+    基于市场分析、竞品分析、财务分析和风险评估的所有JSON结构化结论，
     为以下创业方向输出最终的创业机会评估报告：{startup_idea}
 
-    报告必须包含：
+    报告必须基于以上各Agent的结构化JSON输出进行综合研判。
+
+    必须包含：
     1. Executive Summary（一句话结论 + Go/No-Go/Conditional-Go判断）
-    2. 市场机会总结（核心数据和结论）
-    3. 竞争优势建议（基于竞品分析，推荐差异化策略）
-    4. 关键风险提示（Top 3风险及应对）
-    5. 下一步行动建议（如果Go，建议的MVP范围和验证计划）
-    6. 资金需求估算（启动阶段3-6个月的资金需求）
+    2. 市场机会总结（基于市场分析JSON的核心数据）
+    3. 竞争优势建议（基于竞品分析JSON的差异化策略）
+    4. 财务可行性评估（基于财务分析JSON的LTV/CAC模型结论）
+    5. 关键风险提示（Top 3风险及应对）
+    6. 下一步行动建议（如果Go，建议的MVP范围和验证计划）
+    7. 启动阶段资金需求估算
   expected_output: >
-    一份完整的创业机会评估报告（Markdown格式），结构清晰，
-    结论明确。包含明确的Go/No-Go/Conditional-Go判断
-    和具体的下一步行动建议。报告应该能让一个创业者
-    在10分钟内做出是否深入的判断。
+    严格按以下JSON Schema输出，且必须是合法JSON。重要规则：
+    - 只输出JSON本身，不要用markdown代码块（不要```或```json）包裹
+    - 不要在JSON前后加任何解释文字
+    - 字符串值使用中文，所有字段都必须填写
+    {
+    {
+      "startup_idea": "创业方向",
+      "decision": "Go/No-Go/Conditional-Go",
+      "executive_summary": "一句话结论",
+      "market_opportunity_summary": "市场机会核心结论",
+      "competitive_advantage": "推荐差异化策略",
+      "financial_viability": "财务可行性评估（基于LTV/CAC）",
+      "key_risks": ["风险1及应对", "风险2及应对", "风险3及应对"],
+      "conditions": ["如果Conditional-Go需要满足的条件"],
+      "next_steps": [
+        {"action": "行动项", "timeline": "时间", "priority": "P0/P1/P2"}
+      ],
+      "mvp_scope": "建议MVP范围",
+      "funding_estimate": "启动阶段资金需求",
+      "final_confidence": "信心度（高/中/低）及理由"
+    }
   agent: strategy_advisor
