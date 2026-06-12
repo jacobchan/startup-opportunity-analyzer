@@ -48,3 +48,15 @@ async def get_run_endpoint(run_id: str):
         "created_at": run.created_at.isoformat() if run.created_at else None,
         "completed_at": run.completed_at.isoformat() if run.completed_at else None,
     }
+
+
+@router.get("/{run_id}/report")
+async def get_report_endpoint(run_id: str):
+    run = get_run(get_session(), run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="run not found")
+    if run.status != "complete":
+        raise HTTPException(status_code=409, detail=f"run is {run.status}, not complete")
+    if run.final_report is None:
+        raise HTTPException(status_code=500, detail="run complete but no report")
+    return run.final_report

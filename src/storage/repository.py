@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 
+from src.storage.db import get_session
 from src.storage.models import Run, Evidence, Challenge
 
 
@@ -84,3 +85,13 @@ def update_challenge_response(
 def get_challenges_for_run(session: Session, run_id: str) -> list[Challenge]:
     stmt = select(Challenge).where(Challenge.run_id == run_id).order_by(Challenge.issued_at)
     return list(session.execute(stmt).scalars())
+
+
+def _set_final_report_for_test(run_id: str, report: dict) -> None:
+    """Test helper: directly write final_report to a run."""
+    session = get_session()
+    run = session.get(Run, run_id)
+    if run is None:
+        return
+    run.final_report = report
+    session.commit()
