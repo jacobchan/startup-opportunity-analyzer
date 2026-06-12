@@ -1,5 +1,6 @@
 from src.deliberation.rounds import RoundOrchestrator
 from src.storage import update_run_status, get_session
+from src.storage.models import Run
 
 
 def run_deliberation(run_id: str, startup_idea: str, event_publisher) -> dict:
@@ -30,6 +31,13 @@ def run_deliberation(run_id: str, startup_idea: str, event_publisher) -> dict:
     final_report = crew.run_round3(
         r1_outputs=r1_outputs, challenges=r2_challenges, publisher=event_publisher,
     )
+
+    # Persist final report to the database
+    session = get_session()
+    run = session.get(Run, run_id)
+    if run is not None:
+        run.final_report = final_report
+        session.commit()
 
     update_run_status(get_session(), run_id, "complete")
     event_publisher({"type": "run.complete", "run_id": run_id, "report": final_report})
