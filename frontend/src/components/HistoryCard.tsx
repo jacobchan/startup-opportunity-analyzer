@@ -28,98 +28,138 @@ function formatTime(iso: string | null): string {
   return `${d.getMonth() + 1}月${d.getDate()}日`
 }
 
-function decisionBadge(decision: string | null, status: string) {
-  if (status === 'running' || status === 'queued') {
-    return (
-      <span style={{
-        background: '#e3f2fd', color: '#1565c0',
-        padding: '1px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600,
-      }}>
-        进行中
-      </span>
-    )
-  }
-  if (status === 'failed') {
-    return (
-      <span style={{
-        background: '#ffebee', color: '#c62828',
-        padding: '1px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600,
-      }}>
-        失败
-      </span>
-    )
-  }
-  if (!decision) return null
-  const colors: Record<string, { bg: string; fg: string }> = {
-    'Go': { bg: '#e8f5e9', fg: '#2e7d32' },
-    'No-Go': { bg: '#ffebee', fg: '#c62828' },
-    'Conditional-Go': { bg: '#fff3e0', fg: '#e65100' },
-  }
-  const c = colors[decision] ?? { bg: '#f5f5f5', fg: '#666' }
-  return (
-    <span style={{
-      background: c.bg, color: c.fg,
-      padding: '1px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600,
-    }}>
-      {decision}
-    </span>
-  )
+const decisionConfig: Record<string, { bg: string; fg: string; dot: string }> = {
+  'Go':             { bg: '#ecfdf3', fg: '#0e6245', dot: '#16a34a' },
+  'No-Go':          { bg: '#fef2f2', fg: '#991b1b', dot: '#dc2626' },
+  'Conditional-Go': { bg: '#fff7ed', fg: '#7c2d12', dot: '#ea580c' },
+}
+
+const statusConfig: Record<string, { bg: string; fg: string; label: string }> = {
+  running: { bg: '#eff6ff', fg: '#1e40af', label: '进行中' },
+  queued:  { bg: '#eff6ff', fg: '#1e40af', label: '排队中' },
+  failed:  { bg: '#fef2f2', fg: '#991b1b', label: '失败' },
 }
 
 export default function HistoryCard({ run, onRerun, onDelete, onClick }: Props) {
   const isComplete = run.status === 'complete'
+  const decision = run.decision ? decisionConfig[run.decision] : null
+  const status = statusConfig[run.status] ?? statusConfig.queued
+
   const summary = isComplete
     ? run.executive_summary
     : run.status === 'failed'
-      ? '分析失败'
-      : '分析进行中，预计 10-20 分钟...'
+      ? '分析未能完成'
+      : run.status === 'running'
+        ? 'AI 正在分析中...'
+        : '等待开始分析'
 
   return (
     <div
-      onClick={() => onClick(run.run_id)}
+      onClick={() => isComplete && onClick(run.run_id)}
       style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        padding: '12px 16px', border: '1px solid #eee', borderRadius: 10,
-        cursor: 'pointer', background: run.status === 'running' ? '#f8fbff' : '#fff',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+        padding: '20px 24px',
+        border: '1px solid #eaeaea',
+        borderRadius: 12,
+        cursor: isComplete ? 'pointer' : 'default',
+        background: '#fff',
+        transition: 'border-color 120ms ease, box-shadow 120ms ease',
+      }}
+      onMouseEnter={(e) => {
+        if (isComplete) {
+          e.currentTarget.style.borderColor = '#d4d4d4'
+          e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.04)'
+        }
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.borderColor = '#eaeaea'
+        e.currentTarget.style.boxShadow = 'none'
       }}
     >
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+        {/* Top row: idea + badge */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
           <span style={{
-            fontSize: 14, fontWeight: 600,
+            fontSize: 15, fontWeight: 500, color: '#111',
             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-            maxWidth: 260,
+            maxWidth: 340,
           }}>
             {run.startup_idea.length > 40 ? run.startup_idea.slice(0, 40) + '...' : run.startup_idea}
           </span>
-          {decisionBadge(run.decision, run.status)}
+
+          {isComplete && decision && (
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              background: decision.bg, color: decision.fg,
+              padding: '2px 10px', borderRadius: 20, fontSize: 12, fontWeight: 500,
+            }}>
+              <span style={{
+                width: 6, height: 6, borderRadius: '50%', background: decision.dot,
+              }} />
+              {run.decision}
+            </span>
+          )}
+
+          {!isComplete && (
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              background: status.bg, color: status.fg,
+              padding: '2px 10px', borderRadius: 20, fontSize: 12, fontWeight: 500,
+            }}>
+              {run.status === 'running' && (
+                <span style={{
+                  width: 6, height: 6, borderRadius: '50%',
+                  background: '#3b82f6',
+                  animation: 'pulse 2s ease-in-out infinite',
+                }} />
+              )}
+              {status.label}
+            </span>
+          )}
         </div>
+
+        {/* Summary */}
         <p style={{
-          color: run.status === 'running' ? '#aaa' : '#888', fontSize: 12, margin: 0,
+          color: run.status === 'running' || run.status === 'queued' ? '#9e9e9e' : '#5f5f5f',
+          fontSize: 13, lineHeight: 1.5, margin: 0,
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          maxWidth: 340,
+          maxWidth: 460,
         }}>
           {summary ?? ''}
         </p>
-        <span style={{ color: '#aaa', fontSize: 11 }}>{formatTime(run.created_at)}</span>
+
+        {/* Time */}
+        <span style={{ color: '#b0b0b0', fontSize: 12, marginTop: 6, display: 'inline-block' }}>
+          {formatTime(run.created_at)}
+        </span>
       </div>
-      <div style={{ display: 'flex', gap: 6, marginLeft: 12, flexShrink: 0 }}
+
+      {/* Actions */}
+      <div style={{ display: 'flex', gap: 8, marginLeft: 16, flexShrink: 0 }}
            onClick={(e) => e.stopPropagation()}>
         <button
           onClick={() => onRerun(run.startup_idea)}
           style={{
-            padding: '4px 10px', fontSize: 11, border: '1px solid #ddd',
-            borderRadius: 6, cursor: 'pointer', background: '#fff',
+            padding: '6px 14px', fontSize: 12, fontWeight: 500,
+            border: '1px solid #e0e0e0', borderRadius: 8,
+            cursor: 'pointer', background: '#fff', color: '#333',
+            transition: 'background 120ms ease',
           }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = '#f5f5f5' }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = '#fff' }}
         >
           重跑
         </button>
         <button
           onClick={() => onDelete(run.run_id)}
           style={{
-            padding: '4px 10px', fontSize: 11, border: 'none',
-            borderRadius: 6, cursor: 'pointer', background: '#fee2e2', color: '#dc2626',
+            padding: '6px 14px', fontSize: 12, fontWeight: 500,
+            border: '1px solid #fecaca', borderRadius: 8,
+            cursor: 'pointer', background: '#fff', color: '#dc2626',
+            transition: 'background 120ms ease',
           }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = '#fef2f2' }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = '#fff' }}
         >
           删除
         </button>

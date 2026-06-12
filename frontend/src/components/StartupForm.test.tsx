@@ -6,7 +6,7 @@ describe('StartupForm', () => {
   it('calls onSubmit with trimmed idea on submit', () => {
     const onSubmit = vi.fn()
     render(<StartupForm onSubmit={onSubmit} loading={false} />)
-    fireEvent.change(screen.getByPlaceholderText(/AI Agent/), {
+    fireEvent.change(screen.getByPlaceholderText(/描述你的创业方向/), {
       target: { value: '  AI Agent 平台  ' },
     })
     fireEvent.click(screen.getByText('开始分析'))

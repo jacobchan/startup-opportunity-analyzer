@@ -171,10 +171,23 @@ export default function App() {
 
   if (view === 'form') {
     return (
-      <div style={{ padding: 32, maxWidth: 800, margin: '0 auto' }}>
-        <h1>创业机会分析器</h1>
-        <p style={{ color: '#666' }}>5 个 AI Agent 协作分析你的想法，10-20 分钟出 Go/No-Go 结论</p>
+      <div style={{
+        maxWidth: 680, margin: '0 auto', padding: '60px 32px 80px',
+      }}>
+        <div style={{ marginBottom: 48 }}>
+          <h1 style={{
+            fontSize: 28, fontWeight: 700, color: '#0d0d0d', margin: '0 0 8px',
+            letterSpacing: '-0.02em',
+          }}>
+            创业机会分析器
+          </h1>
+          <p style={{ color: '#8a8a8a', fontSize: 15, margin: 0, lineHeight: 1.5 }}>
+            5 个 AI Agent 协作分析你的创业想法，10–20 分钟输出 Go / No-Go 结论
+          </p>
+        </div>
+
         <StartupForm onSubmit={startAnalysis} loading={false} />
+
         <HistoryList
           onRerun={(idea) => startAnalysis(idea)}
           onViewRun={(runId) => {
