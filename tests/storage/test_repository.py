@@ -66,6 +66,41 @@ def test_evidence_dedup_by_url_hash(db_session):
     assert ev1.evidence_id == ev2.evidence_id
 
 
+def test_list_runs_returns_most_recent_first(db_session):
+    r1 = create_run(db_session, startup_idea="first")
+    r2 = create_run(db_session, startup_idea="second")
+    from src.storage.repository import list_runs
+    runs, total = list_runs(db_session, limit=10, offset=0)
+    assert len(runs) == 2
+    assert runs[0].startup_idea == "second"  # newest first
+
+
+def test_list_runs_respects_limit_and_offset(db_session):
+    for i in range(5):
+        create_run(db_session, startup_idea=f"idea {i}")
+    from src.storage.repository import list_runs
+    runs, total = list_runs(db_session, limit=2, offset=1)
+    assert len(runs) <= 2
+    assert total == 5
+
+
+def test_delete_run_removes_run_and_cascades(db_session):
+    run = create_run(db_session, startup_idea="x")
+    run_id = run.run_id
+    from src.storage.repository import delete_run, add_evidence, add_challenge, get_run
+    add_evidence(db_session, run_id=run_id, source_type="search",
+                 query="q", url=None, title=None, content_excerpt="c", url_hash="h1")
+    add_challenge(db_session, run_id=run_id, issuer="a", target="b", claim="c", reason="r")
+    deleted = delete_run(db_session, run_id)
+    assert deleted is True
+    assert get_run(db_session, run_id) is None
+
+
+def test_delete_run_returns_false_for_unknown_id(db_session):
+    from src.storage.repository import delete_run
+    assert delete_run(db_session, "no-such-id") is False
+
+
 def test_add_challenge_and_respond(db_session):
     run = create_run(db_session, startup_idea="x")
     ch = add_challenge(

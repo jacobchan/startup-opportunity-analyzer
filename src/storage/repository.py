@@ -87,6 +87,28 @@ def get_challenges_for_run(session: Session, run_id: str) -> list[Challenge]:
     return list(session.execute(stmt).scalars())
 
 
+def list_runs(session: Session, limit: int = 10, offset: int = 0) -> tuple[list[Run], int]:
+    """Return (runs ordered by created_at DESC, total count)."""
+    from sqlalchemy import func, select
+    total = session.execute(select(func.count(Run.run_id))).scalar_one()
+    stmt = select(Run).order_by(Run.created_at.desc()).limit(limit).offset(offset)
+    runs = list(session.execute(stmt).scalars())
+    return runs, total
+
+
+def delete_run(session: Session, run_id: str) -> bool:
+    """Hard-delete a run and its associated evidence + challenges. Returns True if deleted."""
+    run = session.get(Run, run_id)
+    if run is None:
+        return False
+    from sqlalchemy import delete as sql_delete
+    session.execute(sql_delete(Evidence).where(Evidence.run_id == run_id))
+    session.execute(sql_delete(Challenge).where(Challenge.run_id == run_id))
+    session.delete(run)
+    session.commit()
+    return True
+
+
 def _set_final_report_for_test(run_id: str, report: dict) -> None:
     """Test helper: directly write final_report to a run."""
     session = get_session()
