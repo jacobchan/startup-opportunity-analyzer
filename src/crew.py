@@ -248,12 +248,11 @@ class StartupAnalyzerCrew:
             agent = getattr(self, agent_key)()
             agent.tools = [make_challenge_tool(run_id=run_id, agent_name=agent_key)]
 
-            # Strip agent field so the single-agent Crew assigns the task correctly
-            challenge_config = {
-                k: v for k, v in self.tasks_config["round2_challenge"].items()
-                if k != "agent"
-            }
-            task = Task(config=challenge_config)
+            task = Task(
+                description=self.tasks_config["round2_challenge"]["description"],
+                expected_output=self.tasks_config["round2_challenge"]["expected_output"],
+                agent=agent,
+            )
             crew = Crew(agents=[agent], tasks=[task], verbose=True)
             crew.kickoff(inputs={
                 "startup_idea": self._startup_idea,
