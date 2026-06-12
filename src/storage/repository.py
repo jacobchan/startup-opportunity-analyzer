@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
-from sqlalchemy import select
+from sqlalchemy import select, func
+from sqlalchemy import delete as sql_delete
 
 from src.storage.db import get_session
 from src.storage.models import Run, Evidence, Challenge
@@ -89,7 +90,6 @@ def get_challenges_for_run(session: Session, run_id: str) -> list[Challenge]:
 
 def list_runs(session: Session, limit: int = 10, offset: int = 0) -> tuple[list[Run], int]:
     """Return (runs ordered by created_at DESC, total count)."""
-    from sqlalchemy import func, select
     total = session.execute(select(func.count(Run.run_id))).scalar_one()
     stmt = select(Run).order_by(Run.created_at.desc()).limit(limit).offset(offset)
     runs = list(session.execute(stmt).scalars())
@@ -101,7 +101,6 @@ def delete_run(session: Session, run_id: str) -> bool:
     run = session.get(Run, run_id)
     if run is None:
         return False
-    from sqlalchemy import delete as sql_delete
     session.execute(sql_delete(Evidence).where(Evidence.run_id == run_id))
     session.execute(sql_delete(Challenge).where(Challenge.run_id == run_id))
     session.delete(run)
