@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock
 
-from src.deliberation.rounds import RoundOrchestrator, RoundTransition
+from src.deliberation.rounds import RoundOrchestrator
 
 
 def test_round_orchestrator_starts_at_none():
@@ -24,7 +24,7 @@ def test_round_transition_emits_event():
     orch.transition_to("round1")
     assert orch.current_round == "round1"
     assert any(
-        isinstance(e, RoundTransition) and e.to_round == "round1"
+        isinstance(e, dict) and e.get("type") == "round.transition" and e["to_round"] == "round1"
         for e in events
     )
 

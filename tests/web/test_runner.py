@@ -19,7 +19,7 @@ def test_run_deliberation_emits_round_transitions():
             event_publisher=events.append,
         )
 
-        transitions = [e.to_round for e in events if hasattr(e, "to_round")]
+        transitions = [e["to_round"] for e in events if e.get("type") == "round.transition"]
         assert transitions == ["round1", "round2", "round3"]
         assert result["decision"] == "Go"
 

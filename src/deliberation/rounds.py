@@ -41,7 +41,11 @@ class RoundOrchestrator:
                     f"invalid transition: {self._current_round} -> {to_round} "
                     f"(must follow order: {ROUND_ORDER})"
                 )
-        self._publisher(RoundTransition(from_round=self._current_round, to_round=to_round))
+        self._publisher({
+            "type": "round.transition",
+            "from_round": self._current_round,
+            "to_round": to_round,
+        })
         self._current_round = to_round
 
     def record_r1_output(self, agent_name: str, output: dict) -> None:

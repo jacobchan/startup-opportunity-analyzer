@@ -19,7 +19,9 @@ from crewai.project import CrewBase, agent, task, crew, before_kickoff, after_ki
 
 from src.tools.search_tool import search_tool
 from src.tools.web_scraper import scrape_tool
+from src.tools.challenge_tool import make_challenge_tool
 from src.config.settings import LLM_MODEL, DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL
+from src.storage import get_session, get_challenges_for_run
 
 
 def _extract_json(text: str) -> str:
@@ -36,6 +38,15 @@ def _extract_json(text: str) -> str:
                 break
         text = "\n".join(lines[start:end])
     return text.strip()
+
+
+def _parse_json(text: str) -> dict:
+    """将LLM输出解析为JSON dict，解析失败则返回包含原始文本的dict"""
+    cleaned = _extract_json(str(text))
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        return {"raw_output": str(text), "parse_error": True}
 
 
 def _get_llm() -> LLM:
@@ -173,6 +184,132 @@ class StartupAnalyzerCrew:
             manager_agent=manager,
             verbose=True,
         )
+
+    # ── 3-round deliberation methods ──────────────────────────
+
+    _ROUND1_AGENTS = [
+        ("market_analyst", "market_analysis"),
+        ("competitor_researcher", "competitor_analysis"),
+        ("finance_analyst", "finance_analysis"),
+    ]
+
+    def run_round1(self, startup_idea: str, run_id: str, publisher) -> dict:
+        """R1: 4 worker agents analyze independently. Returns {agent_name: output_dict}."""
+        self._startup_idea = startup_idea
+        results: dict = {}
+
+        # Run market, competitor, finance (independent)
+        for agent_key, task_key in self._ROUND1_AGENTS:
+            publisher({"type": "agent.start", "agent": agent_key, "round": "round1"})
+            agent = getattr(self, agent_key)()
+            task = Task(config=self.tasks_config[task_key])
+            crew = Crew(agents=[agent], tasks=[task], verbose=True)
+            result = crew.kickoff(inputs={"startup_idea": startup_idea})
+            results[agent_key] = _parse_json(str(result.raw))
+            publisher({
+                "type": "agent.end", "agent": agent_key, "round": "round1",
+                "output_summary": results[agent_key],
+            })
+
+        # Risk depends on the first 3 — inject their outputs into the task
+        publisher({"type": "agent.start", "agent": "risk_reviewer", "round": "round1"})
+        risk_agent = self.risk_reviewer()
+        risk_task = Task(
+            description=(
+                self.tasks_config["risk_review"]["description"]
+                + "\n\n以下是前三项分析的结果，请基于这些数据完成风险评估：\n"
+                + json.dumps(
+                    {k: results[k] for k in ["market_analyst", "competitor_researcher", "finance_analyst"]},
+                    ensure_ascii=False, indent=2,
+                )
+            ),
+            expected_output=self.tasks_config["risk_review"]["expected_output"],
+            agent=risk_agent,
+        )
+        risk_crew = Crew(agents=[risk_agent], tasks=[risk_task], verbose=True)
+        risk_result = risk_crew.kickoff(inputs={"startup_idea": startup_idea})
+        results["risk_reviewer"] = _parse_json(str(risk_result.raw))
+        publisher({
+            "type": "agent.end", "agent": "risk_reviewer", "round": "round1",
+            "output_summary": results["risk_reviewer"],
+        })
+
+        return results
+
+    def run_round2(self, r1_outputs: dict, run_id: str, publisher) -> list[dict]:
+        """R2: cross-challenge — each agent reviews others' outputs and issues challenges."""
+        r1_json = json.dumps(r1_outputs, ensure_ascii=False, indent=2)
+        all_challenges: list[dict] = []
+        seen_ids: set[str] = set()
+
+        for agent_key, _task_key in self._ROUND1_AGENTS:
+            publisher({"type": "agent.start", "agent": agent_key, "round": "round2"})
+
+            agent = getattr(self, agent_key)()
+            agent.tools = [make_challenge_tool(run_id=run_id, agent_name=agent_key)]
+
+            # Strip agent field so the single-agent Crew assigns the task correctly
+            challenge_config = {
+                k: v for k, v in self.tasks_config["round2_challenge"].items()
+                if k != "agent"
+            }
+            task = Task(config=challenge_config)
+            crew = Crew(agents=[agent], tasks=[task], verbose=True)
+            crew.kickoff(inputs={
+                "startup_idea": self._startup_idea,
+                "round1_outputs": r1_json,
+            })
+
+            # Collect challenges issued by this agent in this round
+            session = get_session()
+            for ch in get_challenges_for_run(session, run_id):
+                if ch.issuer == agent_key and ch.challenge_id not in seen_ids:
+                    seen_ids.add(ch.challenge_id)
+                    challenge_dict = {
+                        "challenge_id": ch.challenge_id,
+                        "issuer": ch.issuer,
+                        "target": ch.target,
+                        "claim": ch.claim,
+                        "reason": ch.reason,
+                    }
+                    all_challenges.append(challenge_dict)
+                    publisher({
+                        "type": "challenge.issued",
+                        **challenge_dict,
+                    })
+
+            publisher({"type": "agent.end", "agent": agent_key, "round": "round2"})
+
+        return all_challenges
+
+    def run_round3(
+        self, r1_outputs: dict, challenges: list[dict], run_id: str, publisher,
+    ) -> dict:
+        """R3: strategy advisor synthesizes everything into the final Go/No-Go report."""
+        publisher({"type": "agent.start", "agent": "strategy_advisor", "round": "round3"})
+
+        r1_json = json.dumps(r1_outputs, ensure_ascii=False, indent=2)
+        challenges_json = json.dumps(challenges, ensure_ascii=False, indent=2)
+
+        strategy_agent = self.strategy_advisor()
+        task = Task(
+            description=(
+                self.tasks_config["strategy_report"]["description"]
+                + f"\n\n以下是四个分析 agent 的详细输出：\n{r1_json}"
+                + f"\n\n以下是交叉挑战记录：\n{challenges_json}"
+            ),
+            expected_output=self.tasks_config["strategy_report"]["expected_output"],
+            agent=strategy_agent,
+        )
+        crew = Crew(agents=[strategy_agent], tasks=[task], verbose=True)
+        result = crew.kickoff(inputs={"startup_idea": self._startup_idea})
+
+        output = _parse_json(str(result.raw))
+        publisher({
+            "type": "agent.end", "agent": "strategy_advisor", "round": "round3",
+            "output_summary": output,
+        })
+        return output
 
 
 def run_analysis(startup_idea: str, save_to: str | None = None) -> str:
