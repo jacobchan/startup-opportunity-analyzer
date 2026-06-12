@@ -174,7 +174,7 @@ export default function App() {
       <div style={{
         maxWidth: 680, margin: '0 auto', padding: '60px 32px 80px',
       }}>
-        <div style={{ marginBottom: 48 }}>
+        <div style={{ marginBottom: 48, textAlign: 'center' }}>
           <h1 style={{
             fontSize: 28, fontWeight: 700, color: '#0d0d0d', margin: '0 0 8px',
             letterSpacing: '-0.02em',

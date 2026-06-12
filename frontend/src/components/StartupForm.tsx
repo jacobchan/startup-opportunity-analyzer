@@ -42,9 +42,9 @@ export default function StartupForm({ onSubmit, loading }: Props) {
         type="submit"
         disabled={loading || !idea.trim()}
         style={{
-          alignSelf: 'flex-end',
-          padding: '10px 24px', fontSize: 14, fontWeight: 600,
-          background: loading || !idea.trim() ? '#d4d4d4' : '#111',
+          alignSelf: 'center',
+          padding: '10px 28px', fontSize: 14, fontWeight: 600,
+          background: loading || !idea.trim() ? '#d4d4d4' : '#d97706',
           color: '#fff',
           border: 'none', borderRadius: 10,
           cursor: loading || !idea.trim() ? 'not-allowed' : 'pointer',

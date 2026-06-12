@@ -7,15 +7,17 @@
 
 ## 一、系统全貌
 
-一句话概括：**用户输入一个创业方向描述，系统派 4 个 AI 角色各司其职去调研，最后由一位"战略顾问"汇总出一份 Go/No-Go/Conditional-Go 评估报告。**
+一句话概括：**用户输入一个创业方向描述，系统派 5 个 AI 角色各司其职去调研（市场、竞品、财务、风险），最后由一位"战略顾问"汇总出一份 Go/No-Go/Conditional-Go 评估报告。**
 
 ```
-用户输入                    4个Agent协作                     最终输出
-"AI客服平台"  ─────►  [市场分析] [竞品调研] [风险评估] [战略汇总]  ─────►  分析报告.md
-                        ──►──►──►  (context依赖链)
+用户输入                      5个Agent协作                              最终输出
+"AI客服平台"  ─────►  [市场] [竞品] [财务] [风险] ──┬─► [战略汇总(Manager)]  ─────►  JSON报告
+                              └──►──►──►──►  (context依赖链)
 ```
 
-运行一次完整分析约消耗 50-80K tokens，成本 $0.5-1.0，耗时 10-15 分钟。
+所有 Worker Agent 输出的都是结构化 JSON，最终决策报告也是 JSON Schema 格式。
+
+运行一次完整分析约消耗 60-100K tokens（多了财务建模），成本 $0.7-1.2，耗时 12-18 分钟。
 
 ---
 
@@ -24,23 +26,22 @@
 ```
 startup-opportunity-analyzer/
 ├── src/                          # 核心代码
-│   ├── crew.py                   # 主入口：Crew定义（4个Agent + 4个Task + 协作流程）
+│   ├── crew.py                   # 主入口：Crew定义（5个Agent + 5个Task + 协作流程）
+│   ├── schemas.py                # 各 Agent 输出的 Pydantic 模型（Schema 定义）
 │   ├── __init__.py               # 导出 StartupAnalyzerCrew 和 run_analysis
 │   ├── config/
-│   │   ├── agents.yaml           # 4个Agent的角色定义（role/goal/backstory）
-│   │   ├── tasks.yaml            # 4个Task的任务描述和期望输出
+│   │   ├── agents.yaml           # 5个Agent的角色定义（role/goal/backstory）
+│   │   ├── tasks.yaml            # 5个Task的任务描述（含 JSON Schema）
 │   │   └── settings.py           # 环境变量（LLM模型、API Key）
-│   ├── tools/
-│   │   ├── search_tool.py        # Serper搜索工具（网络检索）
-│   │   └── web_scraper.py        # 网页抓取工具（读取网页内容）
-│   ├── agents/                   # 空目录（预留扩展）
-│   └── tasks/                    # 空目录（预留扩展）
+│   └── tools/
+│       ├── search_tool.py        # Serper搜索工具（网络检索）
+│       └── web_scraper.py        # 网页抓取工具（读取网页内容）
 ├── examples/                     # 示例入口
 │   ├── analyze_ai_agent.py       # 分析"AI Agent客服平台"
 │   ├── analyze_saas.py           # 分析"产业园区SaaS"
 │   └── output/                   # 生成的报告样例
 ├── tests/                        # 测试
-│   └── test_agents.py            # 验证配置加载和Crew构建
+│   └── test_agents.py            # 验证配置加载、Crew构建、Schema导入
 ├── docs/                         # 文档
 │   ├── architecture.md           # 本文件：架构说明
 │   └── design_decisions.md       # 设计决策记录
@@ -85,21 +86,27 @@ def run_analysis(startup_idea, save_to=None):
 1. 自动加载 `agents.yaml` 到 `self.agents_config`
 2. 自动加载 `tasks.yaml` 到 `self.tasks_config`
 
-然后 4 个 `@agent` 方法被收集为 Agent 列表，4 个 `@task` 方法被收集为 Task 列表。
+然后 5 个 `@agent` 方法被收集为 Agent 列表，5 个 `@task` 方法被收集为 Task 列表。
 
 ### 第4步：`@crew` 方法组装最终执行单元
 
 ```python
 @crew
 def crew(self) -> Crew:
-    # 1. 设置任务间的context依赖
-    market, competitor, risk, strategy = self.tasks
-    risk.context = [market, competitor]           # 风险评审依赖市场+竞品
-    strategy.context = [market, competitor, risk]  # 战略报告依赖全部三个
+    # 1. 设置任务间的 context 依赖
+    # self.tasks 顺序: [market, competitor, finance, risk, strategy]
+    market, competitor, finance, risk, strategy = self.tasks
+    risk.context = [market, competitor, finance]              # 风险评审依赖 3 项分析
+    strategy.context = [market, competitor, finance, risk]   # 战略报告依赖全部 4 项
 
-    # 2. strategy_advisor 做Manager，其余3个做Worker
+    # 2. strategy_advisor 做 Manager，其余 4 个做 Worker
     manager = self.strategy_advisor()
-    workers = [self.market_analyst(), self.competitor_researcher(), self.risk_reviewer()]
+    workers = [
+        self.market_analyst(),
+        self.competitor_researcher(),
+        self.finance_analyst(),
+        self.risk_reviewer(),
+    ]
 
     return Crew(
         agents=workers,
@@ -116,40 +123,43 @@ def crew(self) -> Crew:
 
 ---
 
-## 四、4 个 Agent 的分工与工具分配
+## 四、5 个 Agent 的分工与工具分配
 
 ```
-┌─────────────────┐     ┌─────────────────┐
-│  market_analyst  │     │ competitor_     │
-│  资深市场分析师   │     │ researcher      │
-│                 │     │ 竞品调研专家     │
-│  工具: 搜索+抓取 │     │  工具: 搜索+抓取 │
-└────────┬────────┘     └────────┬────────┘
-         │                       │
-         │  context 依赖          │
-         ▼                       ▼
-┌─────────────────────────────────┐
-│        risk_reviewer            │
-│        创业风险评审专家          │
-│        工具: 仅搜索             │
-└───────────────┬─────────────────┘
-                │  context 依赖
-                ▼
-┌─────────────────────────────────┐
-│     strategy_advisor (Manager)  │
-│     创业战略顾问                 │
-│     工具: 无（纯综合分析）       │
-└─────────────────────────────────┘
+┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
+│  market_analyst │  │  competitor_    │  │  finance_analyst│
+│  资深市场分析师  │  │  researcher     │  │  财务分析专家    │
+│ 工具: 搜索+抓取 │  │  工具: 搜索+抓取 │  │ 工具: 搜索+抓取 │
+└────────┬────────┘  └────────┬────────┘  └────────┬────────┘
+         │                    │                    │
+         └────────┬───────────┴──────────┬─────────┘
+                  │      context 依赖    │
+                  ▼                      ▼
+           ┌─────────────────────────────────┐
+           │          risk_reviewer          │
+           │          创业风险评审专家        │
+           │          工具: 仅搜索           │
+           └───────────────┬─────────────────┘
+                           │  context 依赖
+                           ▼
+           ┌─────────────────────────────────┐
+           │     strategy_advisor (Manager)  │
+           │     创业战略顾问                 │
+           │     工具: 无（纯综合分析）       │
+           └─────────────────────────────────┘
 ```
 
-| Agent | 做什么 | 有什么工具 | 输出什么 |
+| Agent | 做什么 | 工具 | 输出格式 |
 |---|---|---|---|
-| **market_analyst** | TAM/SAM/SOM估算、增长趋势、用户画像、时机判断 | 搜索+网页抓取 | 市场分析报告 |
-| **competitor_researcher** | 找5+直接竞品、3+间接竞品，分析商业模式和短板 | 搜索+网页抓取 | 竞品分析报告 |
-| **risk_reviewer** | 技术/市场/团队/资金/政策/时机六维风险评估 | 仅搜索（综合前序结论） | 风险评估报告 |
-| **strategy_advisor** | 汇总三方结论，输出 Go/No-Go/Conditional-Go 判断 | 无（纯推理） | 最终评估报告 |
+| **market_analyst** | TAM/SAM/SOM 估算、增长趋势、用户画像、时机判断 | 搜索+网页抓取 | JSON（市场规模/用户画像） |
+| **competitor_researcher** | 找 5+ 直接竞品、3+ 间接竞品，分析商业模式和短板 | 搜索+网页抓取 | JSON（竞品列表/差异化） |
+| **finance_analyst** | LTV/CAC 模型、定价策略、单位经济效益、资金需求估算 | 搜索+网页抓取 | JSON（LTV/CAC/资金需求） |
+| **risk_reviewer** | 技术/市场/团队/资金/政策/时机六维风险评估 | 仅搜索（综合前序结论） | JSON（风险列表/评级） |
+| **strategy_advisor** | 汇总 4 方结论，输出 Go/No-Go/Conditional-Go 判断 | 无（纯推理） | JSON（最终决策报告） |
 
-**为什么 strategy_advisor 没有工具？** 因为它的角色是"综合研判"，不需要自己去搜索，只需要读取前三个 Agent 的分析结果做出判断。
+**为什么 strategy_advisor 没有工具？** 因为它的角色是"综合研判"，不需要自己去搜索，只需要读取前 4 个 Agent 的分析结果做出判断。
+
+**为什么 finance_analyst 和 market_analyst 工具相同？** 财务建模依赖行业基准数据（可比公司 LTV/CAC、行业平均获客成本），需要主动检索而不是只依赖前序结论。
 
 ---
 
@@ -170,7 +180,7 @@ market_analyst:
 
 ### `tasks.yaml` — 定义任务模板
 
-每个 Task 的 `description` 包含 `{startup_idea}` 占位符，运行时由 CrewAI 通过 `kickoff(inputs=...)` 自动替换为实际输入。`expected_output` 用自然语言描述期望的输出格式。
+每个 Task 的 `description` 包含 `{startup_idea}` 占位符，运行时由 CrewAI 通过 `kickoff(inputs=...)` 自动替换为实际输入。`expected_output` 用**自然语言描述 JSON Schema**（包含字段名、类型、示例），提示 LLM 按结构化 JSON 输出。
 
 ```yaml
 market_analysis:
@@ -178,11 +188,21 @@ market_analysis:
     对以下创业方向进行深入的市场分析：{startup_idea}
     请完成：1. 市场规模估算  2. 增长趋势 ...
   expected_output: >
-    一份结构化的市场分析报告...
+    严格按以下 JSON Schema 输出，且必须是合法JSON：
+    - 只输出JSON本身，不要用markdown代码块（不要```或```json）包裹
+    {
+      "startup_idea": "...",
+      "tam_sam_som": { "tam": {...}, "sam": {...}, "som": {...} },
+      ...
+    }
   agent: market_analyst
 ```
 
-**为什么用自然语言描述而非 Pydantic Schema？** 因为 CrewAI 的 Pydantic 输出在 hierarchical 模式下有兼容性问题，自然语言描述反而质量更高。
+### JSON Schema 来源
+
+5 个 Agent 各自的 JSON Schema 在 `src/schemas.py` 中以 Pydantic 模型形式定义（`MarketAnalysisOutput`、`FinanceAnalysisOutput` 等），作为 `expected_output` 中自然语言 Schema 的事实来源。设计本意是希望在运行时通过 `output_pydantic=...` 强约束 LLM 输出，但实际未启用，原因见下。
+
+**为什么用自然语言描述而非 Pydantic Schema？** 因为 `output_pydantic` 会在 LLM API 调用时发送 `response_format: { type: "json_schema" }` 参数，而 DeepSeek API 不支持这个参数类型（会返回 400 错误 `This response_format type is unavailable now`）。自然语言描述反而能稳定让 LLM 产出合法 JSON，`run_analysis()` 再用 `json.loads` 兜底解析。
 
 ---
 
@@ -213,8 +233,8 @@ return LLM(model=LLM_MODEL)  # 默认走 Anthropic
 | **scrape_tool** | `crewai_tools.ScrapeWebsiteTool` | 抓取指定 URL 的网页文本内容，用于深入阅读搜索到的页面 |
 
 工具分配策略：
-- **market_analyst + competitor_researcher** 拥有搜索+抓取两个工具，因为它们需要主动收集外部信息
-- **risk_reviewer** 仅有搜索工具，主要依赖前序分析结论，偶尔补充搜索
+- **market_analyst + competitor_researcher + finance_analyst** 拥有搜索+抓取两个工具，因为它们都需要主动收集外部行业数据
+- **risk_reviewer** 仅有搜索工具，主要依赖前序分析结论（含财务分析的 LTV/CAC 数据），偶尔补充搜索
 - **strategy_advisor** 无工具，纯粹综合推理
 
 ---
@@ -275,25 +295,26 @@ class StartupAnalyzerCrew:
 
 1. **报告质量提升** — 在 `agents.yaml` 的 backstory 中加入更具体的分析框架（如 Porter's Five Forces、STP 模型），让 Agent 输出更结构化
 2. **增加数据源工具** — 添加天眼查/企查查 API 工具，让竞品调研拿到融资数据；添加财报/行业报告数据库接口
-3. **输出格式化** — 在 `@after_kickoff` 中添加 Markdown → PDF 的转换，或者用正则/Jinja2 模板对报告做后处理
+3. **JSON Schema 严格化** — 切换到支持 `response_format: json_schema` 的 LLM（如 Claude / GPT-4o）后，启用 `output_pydantic` 做强约束；或在本地增加 JSON 解析重试与字段补全逻辑
+4. **输出格式化** — 在 `@after_kickoff` 中添加 Markdown → PDF 的转换，或者用正则/Jinja2 模板对报告做后处理
 
 ### 中期扩展（增加 Agent/Task）
 
-4. **新增"技术可行性分析师"Agent** — 专门评估技术栈选型、开源组件可用性、开发周期估算，当前4个Agent都未深入覆盖这一维度
-5. **新增"财务建模Agent"** — 自动生成收入预测模型、现金流分析、估值模型，让"资金需求估算"从定性变定量
-6. **增加多轮对话能力** — 用户看完报告后可以追问"帮我深入分析竞品X"或"换一个方向：教育行业"，在当前分析上下文中继续探索
+5. **新增"技术可行性分析师"Agent** — 专门评估技术栈选型、开源组件可用性、开发周期估算，当前 5 个 Agent 都未深入覆盖这一维度
+6. **财务模型深化** — 在 `finance_analyst` 中加入现金流预测、敏感性分析、估值模型；当前只覆盖 LTV/CAC 单点
+7. **增加多轮对话能力** — 用户看完报告后可以追问"帮我深入分析竞品 X"或"换一个方向：教育行业"，在当前分析上下文中继续探索
 
 ### 架构级演进
 
-7. **引入 CrewAI Flow** — 用 `Flow` 编排多个 Crew 的执行，比如：
+8. **引入 CrewAI Flow** — 用 `Flow` 编排多个 Crew 的执行，比如：
    - Flow 1：快速筛选（只跑 market_analyst，5分钟出初筛结论）
    - Flow 2：深度分析（当前完整流程）
-   - Flow 3：专题深挖（用户选某个维度后只跑对应Agent）
+   - Flow 3：专题深挖（用户选某个维度后只跑对应 Agent）
 
    这样用户可以先用"快筛"判断值不值得深入，避免每次都等 15 分钟。
 
-8. **RAG + 向量数据库** — 引入 Milvus/PGVector，存储历史分析报告和行业数据，让 Agent 能参考"上一次分析类似方向时的结论"，形成知识积累。其实不仅仅的vetorDB，更需要一套4层的memory体系构建，确保助手具备多层记忆。（这里我会考虑是不是对于这个创业机会分析Agent过度设计记忆了，其实作为一个用完即走的工具时，其实它就没有必要有那么多层的记忆，只需要保留部分数据即可。）
+9. **RAG + 向量数据库** — 引入 Milvus/PGVector，存储历史分析报告和行业数据，让 Agent 能参考"上一次分析类似方向时的结论"，形成知识积累。其实不仅仅的 vetorDB，更需要一套 4 层的 memory 体系构建，确保助手具备多层记忆。（这里我会考虑是不是对于这个创业机会分析 Agent 过度设计记忆了，其实作为一个用完即走的工具时，其实它就没有必要有那么多层的记忆，只需要保留部分数据即可。）
 
-9. **评估框架** — 自动对比分析报告中的预测与实际情况（如果用户半年后回来填反馈），量化 Agent 分析的准确度。 需要建立一套Eval体系，通过数据化、可视化的方式对模型进行评估，确保Harness系统的可靠。
+10. **评估框架** — 自动对比分析报告中的预测与实际情况（如果用户半年后回来填反馈），量化 Agent 分析的准确度。需要建立一套 Eval 体系，通过数据化、可视化的方式对模型进行评估，确保 Harness 系统的可靠。
 
-10. **插件化架构** — 让用户自定义 Agent 角色、工具和分析维度，支持不同行业模板（医疗、教育、金融各有不同的风险关注点）
+11. **插件化架构** — 让用户自定义 Agent 角色、工具和分析维度，支持不同行业模板（医疗、教育、金融各有不同的风险关注点）
