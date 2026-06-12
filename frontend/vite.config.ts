@@ -7,8 +7,8 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/runs': 'http://localhost:8000',
-      '/evidence': 'http://localhost:8000',
+      '/runs': 'http://127.0.0.1:8002',
+      '/evidence': 'http://127.0.0.1:8002',
     },
   },
   test: {
