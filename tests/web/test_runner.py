@@ -3,8 +3,8 @@ from unittest.mock import MagicMock, patch
 
 def test_run_deliberation_emits_round_transitions():
     with patch("src.crew.StartupAnalyzerCrew") as MockCrew, \
-         patch("src.storage.update_run_status"), \
-         patch("src.storage.get_session"):
+         patch("src.web.runner.update_run_status"), \
+         patch("src.web.runner.get_session"):
         mock_instance = MagicMock()
         mock_instance.run_round1.return_value = {"market_analyst": {"tam": "100"}}
         mock_instance.run_round2.return_value = [{"challenge_id": "ch-1"}]
@@ -26,8 +26,8 @@ def test_run_deliberation_emits_round_transitions():
 
 def test_run_deliberation_returns_final_report():
     with patch("src.crew.StartupAnalyzerCrew") as MockCrew, \
-         patch("src.storage.update_run_status"), \
-         patch("src.storage.get_session"):
+         patch("src.web.runner.update_run_status"), \
+         patch("src.web.runner.get_session"):
         mock_instance = MagicMock()
         mock_instance.run_round1.return_value = {}
         mock_instance.run_round2.return_value = []
