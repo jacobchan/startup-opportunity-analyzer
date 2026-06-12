@@ -227,3 +227,23 @@ strategy_report:
       "final_confidence": "信心度（高/中/低）及理由"
     }
   agent: strategy_advisor
+
+round2_challenge:
+  description: >
+    第二轮：交叉审视其他 4 个 agent 在第一轮的分析结果。
+    创业方向：{startup_idea}
+
+    其他 agent 的结论：
+    {round1_outputs}
+
+    你的任务：
+    1. 仔细阅读所有 agent 的输出
+    2. 如果发现任何论断缺乏证据支撑、数据可疑、或与其他 agent 矛盾，
+       使用 challenge 工具发起挑战（最多 3 次）
+    3. 如果没有明显问题，可以直接接受，不需要发起挑战
+  expected_output: >
+    你的回应可以包含 0-3 个 challenge 调用，每个挑战指明：
+    - target: 被挑战的 agent 名
+    - claim: 具体被挑战的论断
+    - reason: 挑战理由（引用其他 agent 的字段或你自己的依据）
+  agent: market_analyst
