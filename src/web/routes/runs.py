@@ -1,9 +1,10 @@
 import asyncio
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi.responses import Response
 from pydantic import BaseModel
 
-from src.storage import create_run, get_run, get_session
+from src.storage import create_run, get_run, get_session, list_runs, delete_run
 from src.storage.db import init_db
 from src.web.events import EventBus
 from src.web.run_registry import registry
@@ -36,6 +37,37 @@ async def _run_in_background(run_id: str, startup_idea: str, bus: EventBus) -> N
     )
 
 
+@router.get("")
+async def list_runs_endpoint(limit: int = 10, offset: int = 0):
+    init_db()
+    session = get_session()
+    runs, total = list_runs(session, limit=limit, offset=offset)
+    items = []
+    for run in runs:
+        item = {
+            "run_id": run.run_id,
+            "startup_idea": run.startup_idea,
+            "status": run.status,
+            "created_at": run.created_at.isoformat() if run.created_at else None,
+            "completed_at": run.completed_at.isoformat() if run.completed_at else None,
+            "decision": None,
+            "executive_summary": None,
+        }
+        if run.final_report:
+            item["decision"] = run.final_report.get("decision")
+            item["executive_summary"] = run.final_report.get("executive_summary")
+        items.append(item)
+    return {"runs": items, "total": total}
+
+
+@router.delete("/{run_id}")
+async def delete_run_endpoint(run_id: str):
+    init_db()
+    if delete_run(get_session(), run_id):
+        return Response(status_code=204)
+    raise HTTPException(status_code=404, detail="run not found")
+
+
 @router.get("/{run_id}")
 async def get_run_endpoint(run_id: str):
     run = get_run(get_session(), run_id)
@@ -47,6 +79,7 @@ async def get_run_endpoint(run_id: str):
         "status": run.status,
         "created_at": run.created_at.isoformat() if run.created_at else None,
         "completed_at": run.completed_at.isoformat() if run.completed_at else None,
+        "round1_outputs": run.round1_outputs,
     }
 
 
