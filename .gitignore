@@ -12,3 +12,6 @@ output/
 !examples/output/
 .DS_Store
 docs
+data/
+frontend/dist/
+frontend/node_modules/
