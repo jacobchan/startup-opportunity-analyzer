@@ -1,219 +1,241 @@
 # Startup Opportunity Analyzer
 
-基于 **CrewAI** 的多智能体创业机会分析系统。通过 5 个协作 Agent，自动完成市场分析、竞品调研、财务建模、风险评估，并输出 JSON Schema 格式的结构化创业机会评估报告。
+> 基于 **CrewAI** 的多智能体创业机会分析系统。5 个 Agent 协作完成市场分析、竞品调研、财务建模、风险评估，输出 Go/No-Go/Conditional-Go 的结构化评估报告。
+>
+> 完整 web 端产品，支持 SSE 实时推送、历史分析、断点续跑。中文场景，DeepSeek V4 Pro + Serper 搜索。
 
-LLM 本次项目采用的 deepseek-v4-pro，整体输出质量还不错。
+## 核心特性
 
-整体项目还在持续优化阶段，希望大家可以提供宝贵的建议和意见，未来可预见 Agent 还是很大空间可以做点事情。
+- **3 轮 deliberation 机制**：第 1 轮 4 个 worker 独立分析 → 第 2 轮交叉挑战 → 第 3 轮战略汇总。避免单 Agent 视角偏差
+- **状态化引擎**：每完成一个 agent 即 checkpoint 写入 SQLite，崩溃后能从断点继续而非从头重跑
+- **Web 端产品**：FastAPI + React + SSE 实时推送 + 历史列表 + URL 持久化
+- **证据可追溯**：搜索/抓取结果落库到 `Evidence` 表，报告里 `ev-xxx` 引用一键查原文
+- **跨平台部署**：包含阿里云 ECS 部署文档和 systemd / Nginx 配置
+
+## 快速开始
+
+```bash
+# 1. 克隆 & 安装
+git clone https://github.com/jacobchan/startup-opportunity-analyzer.git
+cd startup-opportunity-analyzer
+pip install -e ".[dev]"
+
+# 2. 配置 API Key
+cp .env.example .env
+# 编辑 .env：填入 DEEPSEEK_API_KEY 和 SERPER_API_KEY
+
+# 3. CLI 跑一次分析
+python -m examples.analyze_ai_agent
+
+# 4. 启动 web 端
+cd frontend && npm install && npm run build && cd ..
+uvicorn src.web.app:create_app --factory --host 0.0.0.0 --port 8000
+# 访问 http://localhost:8000
+```
+
+## 三种使用方式
+
+### 1. CLI 模式（hierarchical 模式）
+
+```bash
+# 跑预设示例
+python -m examples.analyze_ai_agent
+python -m examples.analyze_saas
+
+# 自定义方向
+python -m src.crew "面向物业管理的 AI Agent 平台"
+python -m src.crew "你的创业方向" examples/output/my_report.md
+```
+
+CLI 走 `StartupAnalyzerCrew.crew()` 的 hierarchical 模式，5 个 Agent 一次性串起来。
+
+### 2. Web 端（3 轮 deliberation）
+
+启动后访问 `http://localhost:8000`：
+- 输入创业方向 → 提交 → SSE 实时看到 5 个 Agent 轮流工作
+- 第 2 轮会看到 3 个 Agent 互相挑战的日志
+- 完成后跳转到最终评估页（Go/No-Go/Conditional-Go）
+- 历史列表可查看/重跑/删除过往分析
+
+### 3. 程序化调用
+
+```python
+from src.web.runner import run_deliberation
+from src.storage import create_run, get_session
+
+session = get_session()
+run = create_run(session, startup_idea="AI Agent 平台")
+session.close()
+
+report = run_deliberation(
+    run_id=run.run_id,
+    startup_idea="AI Agent 平台",
+    event_publisher=lambda e: print(e),
+)
+print(report["decision"])
+```
 
 ## 架构
 
-![alt text](image-4.png)
+```
+                            ┌─────────────────────────────┐
+                            │      DeliberationEngine     │
+                            │   (stateful, checkpointed)  │
+                            └──────────────┬──────────────┘
+                                           │
+        ┌──────────── R1 ─────────────┐    ┌┴──────── R2 ─────────┐
+        │  4 agents analyze           │    │  3 agents cross-     │
+        │  independently              │    │  challenge via tool  │
+        │                             │    │                       │
+        │  market_analyst ─┐          │    │  market_analyst       │
+        │  competitor ─────┼─→ checkpoint per agent →  competitor     │
+        │  finance ────────┤          │    │  finance              │
+        │  risk_reviewer ──┘ (depends on first 3)                       │
+        └─────────────────────────────┘    └───────────────────────┘
+                                           │
+                                           ▼
+                                ┌──────────────────────┐
+                                │  R3: strategy_advisor │
+                                │  synthesize to        │
+                                │  Go/No-Go report      │
+                                └──────────────────────┘
+```
 
-5 个 Agent 协同工作：
+### 5 个 Agent 角色
 
 | Agent | 角色 | 输出 | 工具 |
 |-------|------|------|------|
-| `market_analyst` | 资深市场分析师 | JSON（TAM/SAM/SOM、增长趋势、用户画像） | search + scrape |
-| `competitor_researcher` | 竞品与行业调研专家 | JSON（竞品列表、竞争格局、差异化机会） | search + scrape |
-| `finance_analyst` | 创业财务分析专家 | JSON（LTV/CAC 模型、定价策略、单位经济效益、资金需求） | search + scrape |
-| `risk_reviewer` | 创业风险评审专家 | JSON（多维度风险列表、整体风险评级） | search |
-| `strategy_advisor`（Manager） | 创业战略顾问 | JSON（Go/No-Go 决策、下一步行动计划、信心度） | — |
+| `market_analyst` | 资深市场分析师 | TAM/SAM/SOM、增长趋势、用户画像 | search + scrape |
+| `competitor_researcher` | 竞品与行业调研专家 | 竞品列表、竞争格局、差异化机会 | search + scrape |
+| `finance_analyst` | 创业财务分析专家 | LTV/CAC 模型、定价策略、资金需求 | search + scrape |
+| `risk_reviewer` | 创业风险评审专家 | 多维度风险列表、整体风险评级 | search |
+| `strategy_advisor` | 创业战略顾问 | Go/No-Go 决策、下一步行动计划、信心度 | — |
 
-`strategy_advisor` 作为 Manager 协调前 4 个 Worker，所有 Worker 输出均为结构化 JSON，由 Manager 综合后输出最终决策报告。
+所有 Worker Agent 输出都是结构化 JSON。`strategy_advisor` 在 hierarchical 模式下做 Manager，在 web 端 R3 单独汇总。
+
+### 状态化引擎
+
+`src/deliberation/engine.py` 是 3 轮编排的核心：
+
+- **Agent 缓存**：每个角色 Agent 构造一次复用（除非 R2 需要换 `challenge_tool`）
+- **Checkpoint 粒度**：每完成一个 agent 写入一次 `Run.deliberation_state`
+- **崩溃恢复**：进程崩了后调 `POST /runs/{id}/resume`，从下一个未完成 agent 继续
+- **可单测**：`tests/deliberation/test_engine.py` 用 mock agent factory 跑 10 个控制流测试
+
+详见 [docs/deliberation_engine.md](docs/deliberation_engine.md)。
 
 ## 技术栈
 
 | 组件 | 选择 | 说明 |
 |------|------|------|
-| Agent 框架 | **CrewAI** (hierarchical process) | 角色驱动的多 Agent 协作 |
-| LLM | DeepSeek V4 Pro | 中文理解 + 结构化输出稳定，推理能力稳定，且成本非常低 |
-| 输出约束 | JSON Schema（自然语言描述） | DeepSeek 不支持 API 级别的 `response_format: json_schema`，所以通过 `expected_output` 字段描述 Schema 并手动解析 |
-| 搜索 | Serper API | 中文搜索质量好，成本低，每次大概也就花费 40 次调用 |
+| Agent 框架 | **CrewAI** (hierarchical) | 角色驱动多 Agent 协作 |
+| LLM | DeepSeek V4 Pro | 中文理解 + 结构化输出稳定、成本低 |
+| 输出约束 | JSON Schema（自然语言描述） | DeepSeek 不支持 `response_format: json_schema`，通过 `expected_output` 描述 Schema 手动解析 |
+| 搜索 | Serper API | 中文搜索质量好、$50/50000 次 |
 | 网页抓取 | ScrapeWebsiteTool | CrewAI 内置 |
-| 语言 | Python 3.11+ | |
+| Web 框架 | FastAPI | SSE 流式响应 + async |
+| 存储 | SQLite + SQLAlchemy | 单文件、零运维 |
+| 前端 | React + Vite + TypeScript | SSE 订阅 + 历史列表 |
+| 语言 | Python 3.11+ / TypeScript 5 | |
 
-## 为什么用 CrewAI 而不是 LangGraph？
-
-本项目的核心场景是"多角色协作分析"——每个 Agent 有明确的角色定位和专业边界，CrewAI 的 role/goal/backstory 机制天然匹配这种需求。
-
-| 维度 | CrewAI | LangGraph |
-|------|--------|-----------|
-| 驱动方式 | 角色驱动 | 状态图驱动 |
-| 适合场景 | 模拟团队协作 | 复杂工作流控制 |
-| 上手难度 | 低 | 中高 |
-| 灵活性 | 中 | 高 |
-
-详见 [docs/design_decisions.md](docs/design_decisions.md)
-
-## 快速开始
-
-```bash
-# 1. 克隆项目
-git clone https://github.com/jacobchan/startup-opportunity-analyzer.git
-cd startup-opportunity-analyzer
-
-# 2. 安装依赖（含 dev 依赖）
-pip install -e ".[dev]"
-
-# 2.1 激活环境（MacOS）
-source .venv/bin/activate
-
-# 3. 配置 API Key
-cp .env.example .env
-# 编辑 .env，填入你的 API Key
-
-# 4. 运行分析
-python -m examples.analyze_ai_agent
-```
-
-## 使用方式
-
-### 方式一：运行预设示例
-
-```bash
-# 分析 AI Agent 客服平台方向
-python -m examples.analyze_ai_agent
-
-# 分析垂直 SaaS 方向
-python -m examples.analyze_saas
-```
-
-- 启动 Agent 大军，开始干活：
-![alt text](image-3.png)
-
-### 方式二：自定义分析（命令行）
-
-```bash
-# 命令行直接指定方向
-python -m src.crew "你的创业方向描述"
-
-# 指定输出文件
-python -m src.crew "你的创业方向描述" examples/output/my_report.md
-```
-
-不指定第二个参数时，报告只打印到终端，不会落盘。
-
-### 方式三：作为模块集成（程序化调用）
-
-```python
-from src.crew import run_analysis
-
-# 仅返回 JSON 字符串
-report_json = run_analysis(
-    startup_idea="面向物业管理的 AI Agent 平台，支持自动工单、智能巡检、业主服务"
-)
-print(report_json)
-
-# 或直接保存到文件
-report_json = run_analysis(
-    startup_idea="面向物业管理的 AI Agent 平台",
-    save_to="output/my_analysis.json",
-)
-```
-
-### 方式四：作为模块集成，自定义 Agent 集合（高级用法）
-
-如果需要修改 Agent 列表、任务依赖或流程控制，可以直接使用 `@CrewBase` 类：
-
-```python
-from src.crew import StartupAnalyzerCrew
-
-analyzer = StartupAnalyzerCrew()
-crew = analyzer.crew()  # 已配置好 5 个 Agent、5 个 Task、context 依赖
-
-# 自定义输入
-result = crew.kickoff(inputs={"startup_idea": "你的创业方向"})
-print(result.raw)
-```
-
-你完全可以用 AI 快速 Gen 一个帅气的 UI 界面（例如 React），然后让它成为人机交互的界面。
-
-## 示例输出
-
-![alt text](image.png)
-
-运行完成后会在 `examples/output/` 下生成 Markdown 格式的分析报告（或 JSON，取决于 `expected_output` 是否被 LLM 严格遵守），包含：
-
-- **市场分析**：TAM/SAM/SOM 规模估算、增长趋势、用户画像
-- **竞品分析**：竞品对比、商业模式拆解、差异化机会
-- **财务分析**：LTV/CAC 模型、定价策略、单位经济效益、资金需求
-- **风险评估**：技术/市场/团队/资金/政策多维度评级
-- **综合研判**：Go/No-Go/Conditional-Go 建议 + 行动计划
-
-具体如下：
-![alt text](image-1.png)
-有数据支撑：
-![alt text](image-2.png)
-
-## 项目结构
+## 目录结构
 
 ```
 startup-opportunity-analyzer/
-├── README.md
-├── pyproject.toml
-├── .env.example
 ├── src/
-│   ├── crew.py              # Crew 定义（5 个 Agent + 5 个 Task + context 依赖）
-│   ├── schemas.py           # 各 Agent 输出的 Pydantic 模型（Schema 定义）
+│   ├── crew.py                       # StartupAnalyzerCrew (hierarchical 模式入口)
+│   ├── schemas.py                    # 6 套 Pydantic 输出模型
 │   ├── config/
-│   │   ├── agents.yaml      # 5 个 Agent 的角色配置
-│   │   ├── tasks.yaml       # 5 个 Task 定义（含 JSON Schema 描述）
-│   │   └── settings.py      # 环境变量 & 全局配置
-│   └── tools/
-│       ├── search_tool.py   # Serper 搜索工具
-│       └── web_scraper.py   # 网页内容提取
-├── examples/
-│   ├── analyze_ai_agent.py  # AI Agent 方向分析
-│   ├── analyze_saas.py      # SaaS 方向分析
-│   └── output/              # 分析报告输出
+│   │   ├── agents.yaml               # 5 个 Agent 的 role/goal/backstory
+│   │   ├── tasks.yaml                # 5+1 个 Task 定义
+│   │   └── settings.py               # 环境变量
+│   ├── deliberation/                 # 3 轮 deliberation 引擎
+│   │   ├── engine.py                 # DeliberationEngine（核心）
+│   │   ├── state.py                  # EngineState（Pydantic）
+│   │   ├── checkpoint.py             # CheckpointStore（SQLite 持久化）
+│   │   ├── rounds.py                 # RoundOrchestrator（兼容旧测试）
+│   │   ├── evidence.py               # 证据捕获装饰器
+│   │   └── protocol.py               # ChallengeDraft / Verdict
+│   ├── tools/                        # search / scrape / challenge
+│   ├── storage/                      # SQLAlchemy models + repository
+│   └── web/                          # FastAPI 应用
+│       ├── app.py                    # create_app 工厂
+│       ├── runner.py                 # run_deliberation / resume_deliberation
+│       ├── events.py                 # EventBus（SSE）
+│       ├── run_registry.py           # run_id -> EventBus 映射
+│       └── routes/
+│           ├── runs.py               # POST /runs, GET /runs/{id}, DELETE
+│           ├── stream.py             # GET /runs/{id}/stream (SSE)
+│           ├── evidence.py           # GET /evidence/{id}
+│           └── resume.py             # POST /runs/{id}/resume
+├── frontend/                         # React + Vite + TypeScript
+│   └── src/
+│       ├── App.tsx                   # 视图路由 + 状态恢复
+│       ├── components/               # StartupForm, HistoryList, AgentCard, ...
+│       └── lib/                      # sse.ts, types.ts
+├── examples/                         # CLI 入口示例
+│   ├── analyze_ai_agent.py
+│   └── analyze_saas.py
+├── tests/                            # 90 个测试，全套 < 3 秒
+│   ├── deliberation/                 # 状态机 + 引擎控制流（17 个）
+│   ├── web/                          # API 层（19 个）
+│   ├── storage/                      # 仓储层
+│   ├── tools/                        # 工具层
+│   ├── integration/                  # 端到端（2 个）
+│   └── test_agents.py                # 配置加载
 ├── docs/
-│   ├── architecture.md      # 系统架构详解
-│   └── design_decisions.md  # 设计决策记录
-└── tests/
-    └── test_agents.py       # 配置加载 + Schema 验证测试
+│   ├── architecture.md               # 旧版架构说明（CLI 模式为主）
+│   ├── design_decisions.md           # 设计决策记录
+│   ├── deliberation_engine.md        # 新版：引擎架构 + 故障恢复手册
+│   └── superpowers/                  # 历史设计文档
+├── data/
+│   └── analyzer.db                   # SQLite 数据库
+├── pyproject.toml
+├── AGENTS.md                         # 给 AI 助手的项目说明
+└── README.md                         # 本文件
 ```
+
+## HTTP API 概览
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/health` | 健康检查 |
+| POST | `/runs` | 创建一次新分析（body: `{"startup_idea": "..."}`） |
+| GET | `/runs` | 列出历史分析（分页） |
+| GET | `/runs/{id}` | 查询单次分析状态 + R1 outputs |
+| GET | `/runs/{id}/report` | 拉取最终评估报告 |
+| GET | `/runs/{id}/stream` | SSE 流，订阅实时事件 |
+| POST | `/runs/{id}/resume` | 从断点恢复（failed / paused 状态） |
+| DELETE | `/runs/{id}` | 删除分析记录 |
+| GET | `/evidence/{id}` | 查询证据原文（搜索/抓取内容） |
+
+完整事件协议见 `frontend/src/lib/types.ts`。
 
 ## 添加新 Agent
 
-1. 在 `src/schemas.py` 中添加对应的 Pydantic 输出模型
-2. 在 `src/config/agents.yaml` 中定义 Agent 的 role/goal/backstory
-3. 在 `src/config/tasks.yaml` 中定义 Task，并在 `expected_output` 中描述 JSON Schema
-4. 在 `src/crew.py` 中用 `@agent` 和 `@task` 装饰器注册，并按需设置 `context` 依赖
+1. 在 `src/schemas.py` 中加 Pydantic 输出模型
+2. 在 `src/config/agents.yaml` 中定义 role/goal/backstory
+3. 在 `src/config/tasks.yaml` 中加 Task 和 `expected_output`
+4. 在 `src/crew.py` 的 `@agent` 和 `@task` 装饰器中注册
+5. 在 `src/web/runner.py` 的 `_build_engine` 中加到 `tools_map`
 
 ## 运行测试
 
 ```bash
-pytest tests/
+pytest tests/                       # 全套（90 个，约 3 秒）
+pytest tests/deliberation/          # 引擎相关
+pytest tests/web/                   # API 层
+pytest tests/integration/           # 端到端
+
+ruff check src/ tests/              # Lint
 ```
-
-## License
-
-「架构师创业笔记」（Personal, xiaohongshu 同名），有兴趣一起合作开发智能体的同伴，可以 email 随时联系我（`jacobchan5519@gmail.com`）
-欢迎交流~~
-
-## 前端开发
-
-```bash
-cd frontend
-npm install
-npm run dev        # 开发模式，端口 5173，自动代理后端
-npm run build      # 生产构建
-```
-
-后端启动：
-
-```bash
-uvicorn src.web.app:create_app --factory --host 0.0.0.0 --port 8000
-```
-
-访问 `http://localhost:8000` 即可使用完整应用。
 
 ## 部署到阿里云 ECS
 
 ### 前置条件
+
 - 阿里云 ECS 一台（2 vCPU / 4GB RAM 起步）
-- 操作系统：Ubuntu 22.04 LTS
+- Ubuntu 22.04 LTS
 - 域名（可选，HTTPS 用）
 
 ### 部署步骤
@@ -222,30 +244,25 @@ uvicorn src.web.app:create_app --factory --host 0.0.0.0 --port 8000
 # 1. 系统依赖
 sudo apt update && sudo apt install -y python3.11 python3.11-venv nginx nodejs npm
 
-# 2. 克隆代码
+# 2. 克隆 & Python 后端
 git clone https://github.com/jacobchan/startup-opportunity-analyzer.git
 cd startup-opportunity-analyzer
-
-# 3. Python 后端
 python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
 
-# 4. 配置环境变量
+# 3. 环境变量
 cp .env.example .env
-# 编辑 .env：填入 DEEPSEEK_API_KEY / DEEPSEEK_BASE_URL / SERPER_API_KEY
+# 编辑 .env：填入 DEEPSEEK_API_KEY / SERPER_API_KEY
 
-# 5. 前端构建
-cd frontend
-npm install
-npm run build
-cd ..
+# 4. 前端构建
+cd frontend && npm install && npm run build && cd ..
 
-# 6. 启动后端
+# 5. 启动后端
 uvicorn src.web.app:create_app --factory --host 0.0.0.0 --port 8000
 ```
 
-### 用 systemd 管理进程
+### systemd 管理
 
 创建 `/etc/systemd/system/analyzer.service`：
 
@@ -260,6 +277,8 @@ User=ubuntu
 WorkingDirectory=/home/ubuntu/startup-opportunity-analyzer
 Environment="PATH=/home/ubuntu/startup-opportunity-analyzer/.venv/bin"
 ExecStart=/home/ubuntu/startup-opportunity-analyzer/.venv/bin/uvicorn src.web.app:create_app --factory --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=10
 
 [Install]
 WantedBy=multi-user.target
@@ -271,7 +290,7 @@ sudo systemctl enable --now analyzer
 sudo systemctl status analyzer
 ```
 
-### 用 Nginx 反向代理 + HTTPS
+### Nginx 反代 + HTTPS
 
 ```nginx
 server {
@@ -303,3 +322,25 @@ HTTPS 用 certbot：
 ```bash
 sudo certbot --nginx -d yourdomain.com
 ```
+
+## 关键设计决策
+
+详见 [docs/design_decisions.md](docs/design_decisions.md)。核心要点：
+
+- **CrewAI over LangGraph**：role-driven 更契合"模拟团队协作"场景
+- **Hierarchical over sequential**：Manager 模式能根据前序结果动态决策
+- **3 轮 deliberation**：单轮分析 + 交叉挑战 + 战略汇总，避免单视角偏差
+- **状态化引擎 + checkpoint**：8 次冷启动 → 1 个有状态单元，可恢复、可单测
+- **YAML config over code**：agent 角色和 prompt 改 YAML 不动 Python
+- **自然语言 expected_output 驱动**：Pydantic schema 校验在 hierarchical 模式下兼容性差，描述驱动实际效果更好
+
+## 已知限制
+
+- **搜索质量依赖 Serper**：搜索结果质量差时，分析结论会受影响
+- **LLM 幻觉风险**：市场规模等数据可能被 LLM 编造，需人工交叉验证（证据可追溯功能是缓解手段）
+- **运行时间**：完整分析 10-15 分钟（5 个 Agent × 工具调用 + 思考），实时场景不合适
+- **成本**：每次完整分析 $0.7-1.2（60-100K tokens）
+
+## License & 联系方式
+
+「架构师创业笔记」（Personal, xiaohongshu 同名）。有兴趣一起开发智能体的同伴可 email 联系我：`jacobchan5519@gmail.com`
