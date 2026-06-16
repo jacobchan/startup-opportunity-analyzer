@@ -21,3 +21,8 @@ frontend/node_modules/
 
 # Personal resume material (not for public repo)
 docs/resume.md
+
+# Vite/Vitest cache (already covered by node_modules/ in spirit, but
+# some tools track nested cache files - be explicit)
+**/.vite/
+**/vitest/
