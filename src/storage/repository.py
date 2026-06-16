@@ -29,6 +29,25 @@ def update_run_status(session: Session, run_id: str, status: str) -> None:
     session.commit()
 
 
+def save_deliberation_state(session: Session, run_id: str, state: dict) -> Run | None:
+    """Persist the deliberation engine state for resumable runs."""
+    run = session.get(Run, run_id)
+    if run is None:
+        return None
+    run.deliberation_state = state
+    session.commit()
+    session.refresh(run)
+    return run
+
+
+def load_deliberation_state(session: Session, run_id: str) -> dict | None:
+    """Load the deliberation engine state for a run, or None if not started."""
+    run = session.get(Run, run_id)
+    if run is None:
+        return None
+    return run.deliberation_state
+
+
 def _url_hash_to_existing(session: Session, url_hash: str) -> Evidence | None:
     stmt = select(Evidence).where(Evidence.url_hash == url_hash).limit(1)
     return session.execute(stmt).scalar_one_or_none()

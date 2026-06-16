@@ -29,4 +29,18 @@ def get_session():
 
 def init_db(engine=None):
     from src.storage.models import Run, Evidence, Challenge  # noqa
-    Base.metadata.create_all(engine or get_engine())
+    eng = engine or get_engine()
+    Base.metadata.create_all(eng)
+    _run_lightweight_migrations(eng)
+
+
+def _run_lightweight_migrations(engine) -> None:
+    """Add columns that were introduced after the initial schema."""
+    from sqlalchemy import inspect, text
+    insp = inspect(engine)
+    if "runs" not in insp.get_table_names():
+        return
+    existing = {c["name"] for c in insp.get_columns("runs")}
+    with engine.begin() as conn:
+        if "deliberation_state" not in existing:
+            conn.execute(text("ALTER TABLE runs ADD COLUMN deliberation_state JSON"))
