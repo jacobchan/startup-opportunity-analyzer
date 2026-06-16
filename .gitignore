@@ -11,7 +11,10 @@ venv/
 output/
 !examples/output/
 .DS_Store
-docs
 data/
 frontend/dist/
 frontend/node_modules/
+
+# Local AI tooling config (not source)
+.claude/
+.superpowers/
