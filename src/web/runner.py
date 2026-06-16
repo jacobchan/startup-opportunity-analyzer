@@ -1,56 +1,156 @@
-from src.deliberation.rounds import RoundOrchestrator
-from src.storage import update_run_status, get_session
+"""Background task runners for the web layer.
+
+Two entry points:
+
+- ``run_deliberation`` — fresh start. Used by ``POST /runs``.
+- ``resume_deliberation`` — continue from a persisted checkpoint. Used
+  by ``POST /runs/{id}/resume``.
+
+Both build a ``DeliberationEngine`` and let it own the round transitions,
+event publishing, and checkpoint writes. The runner's only job is to
+update ``Run.status`` at the boundaries.
+"""
+
+from __future__ import annotations
+
+from src.deliberation.engine import DeliberationEngine
+from src.deliberation.state import ROUND_COMPLETE, ROUND_FAILED
+from src.storage import update_run_status, get_session, get_run
 from src.storage.models import Run
+from src.crew import StartupAnalyzerCrew
+from src.config.settings import LLM_MODEL, DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL
+from crewai import LLM
+from src.tools.search_tool import search_tool
+from src.tools.web_scraper import scrape_tool
+from src.tools.challenge_tool import make_challenge_tool
+
+
+def _build_llm() -> LLM:
+    if "deepseek" in LLM_MODEL:
+        return LLM(
+            model=LLM_MODEL,
+            api_key=DEEPSEEK_API_KEY,
+            base_url=DEEPSEEK_BASE_URL,
+        )
+    return LLM(model=LLM_MODEL)
+
+
+def _build_engine(run_id: str, startup_idea: str, publisher) -> DeliberationEngine:
+    """Assemble all engine dependencies.
+
+    Pulls LLM, agent configs, task configs, and per-role tool lists from
+    the existing ``StartupAnalyzerCrew`` class so the engine shares the
+    same configuration as the hierarchical entry point.
+    """
+    # @CrewBase resolves yaml -> dict lazily on instance creation, so we
+    # need a throwaway instance to read the configs.
+    _probe = StartupAnalyzerCrew()
+    agents_config = _probe.agents_config
+    tasks_config = _probe.tasks_config
+
+    tools_map = {
+        "market_analyst": [search_tool, scrape_tool],
+        "competitor_researcher": [search_tool, scrape_tool],
+        "finance_analyst": [search_tool, scrape_tool],
+        "risk_reviewer": [search_tool],
+        "strategy_advisor": [],
+    }
+
+    def challenge_factory(run_id_: str, agent_name: str, max_challenges: int = 3):
+        return make_challenge_tool(
+            run_id=run_id_, agent_name=agent_name, max_challenges=max_challenges,
+        )
+
+    return DeliberationEngine(
+        run_id=run_id,
+        startup_idea=startup_idea,
+        llm=_build_llm(),
+        agents_config=agents_config,
+        tasks_config=tasks_config,
+        tools_map=tools_map,
+        challenge_tool_factory=challenge_factory,
+        publisher=publisher,
+        session_factory=get_session,
+    )
+
+
+def _persist_r1_outputs(run_id: str, r1_outputs: dict) -> None:
+    """Mirror engine.r1_outputs into the legacy Run.round1_outputs column.
+
+    Frontend restoration code reads from this column when a user reloads
+    mid-run, so we keep writing it for backward compatibility.
+    """
+    session = get_session()
+    try:
+        run = session.get(Run, run_id)
+        if run is not None:
+            run.round1_outputs = r1_outputs
+            session.commit()
+    finally:
+        session.close()
+
+
+def _persist_final_report(run_id: str, report: dict) -> None:
+    session = get_session()
+    try:
+        run = session.get(Run, run_id)
+        if run is not None:
+            run.final_report = report
+            session.commit()
+    finally:
+        session.close()
 
 
 def run_deliberation(run_id: str, startup_idea: str, event_publisher) -> dict:
-    """Execute 3-round deliberation and return final report dict."""
-    from src.crew import StartupAnalyzerCrew
+    """Execute a fresh 3-round deliberation. Returns the final report dict."""
+    update_run_status(get_session(), run_id, "running")
+    engine = _build_engine(run_id, startup_idea, event_publisher)
 
-    crew = StartupAnalyzerCrew()
-    orch = RoundOrchestrator(
-        run_id=run_id,
-        agents={},
-        tasks={},
-        event_publisher=event_publisher,
-    )
+    try:
+        engine.run_round1()
+        _persist_r1_outputs(run_id, engine.state.r1_outputs)
+
+        engine.run_round2()
+        engine.run_round3()
+    except Exception as e:
+        # Engine already persisted the FAILED state; surface the error to
+        # the web layer so it can publish a run.failed event.
+        update_run_status(get_session(), run_id, "failed")
+        event_publisher({"type": "run.failed", "run_id": run_id, "error": repr(e)})
+        raise
+
+    report = engine.state.r3_report
+    _persist_final_report(run_id, report)
+    update_run_status(get_session(), run_id, "complete")
+    event_publisher({"type": "run.complete", "run_id": run_id, "report": report})
+    return report
+
+
+def resume_deliberation(run_id: str, event_publisher) -> dict:
+    """Continue a deliberation from its persisted checkpoint."""
+    run = get_run(get_session(), run_id)
+    if run is None:
+        raise ValueError(f"run {run_id} not found")
+
+    # Build engine with the run's stored startup_idea so checkpoint load works
+    engine = _build_engine(run_id, run.startup_idea, event_publisher)
 
     update_run_status(get_session(), run_id, "running")
 
-    orch.transition_to("round1")
-    r1_outputs = crew.run_round1(
-        startup_idea=startup_idea, run_id=run_id, publisher=event_publisher,
-    )
-    for agent_name, output in r1_outputs.items():
-        orch.record_r1_output(agent_name, output)
+    # Capture r1_outputs pre-resume for the legacy column
+    pre_r1 = dict(engine.state.r1_outputs)
 
-    # Persist R1 outputs so frontend can restore state on refresh
-    session = get_session()
-    run = session.get(Run, run_id)
-    if run is not None:
-        run.round1_outputs = r1_outputs
-        session.commit()
+    try:
+        report = engine.resume()
+    except Exception as e:
+        update_run_status(get_session(), run_id, "failed")
+        event_publisher({"type": "run.failed", "run_id": run_id, "error": repr(e)})
+        raise
 
-    orch.transition_to("round2")
-    r2_challenges = crew.run_round2(
-        r1_outputs=r1_outputs, run_id=run_id, publisher=event_publisher,
-    )
-    for ch in r2_challenges:
-        orch.record_challenge(ch)
-
-    orch.transition_to("round3")
-    final_report = crew.run_round3(
-        r1_outputs=r1_outputs, challenges=r2_challenges,
-        run_id=run_id, publisher=event_publisher,
-    )
-
-    # Persist final report to the database
-    session = get_session()
-    run = session.get(Run, run_id)
-    if run is not None:
-        run.final_report = final_report
-        session.commit()
-
+    # If R1 finished during resume, persist the legacy column
+    if len(engine.state.r1_outputs) > len(pre_r1):
+        _persist_r1_outputs(run_id, engine.state.r1_outputs)
+    _persist_final_report(run_id, report)
     update_run_status(get_session(), run_id, "complete")
-    event_publisher({"type": "run.complete", "run_id": run_id, "report": final_report})
-    return final_report
+    event_publisher({"type": "run.complete", "run_id": run_id, "report": report})
+    return report

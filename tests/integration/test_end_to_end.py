@@ -1,3 +1,5 @@
+"""End-to-end test: POST /runs -> background runner -> SSE stream."""
+
 import asyncio
 import json
 import time
@@ -39,20 +41,19 @@ MOCK_R3_REPORT = {
 
 
 def test_end_to_end_run_completes_with_report():
-    with patch("src.crew.StartupAnalyzerCrew") as MockCrew:
-        instance = MagicMock()
+    with patch("src.web.runner.DeliberationEngine") as MockEngine:
+        instance = MockEngine.return_value
         instance.run_round1.return_value = MOCK_R1_OUTPUTS
         instance.run_round2.return_value = MOCK_R2_CHALLENGES
         instance.run_round3.return_value = MOCK_R3_REPORT
-        MockCrew.return_value = instance
+        instance.state.r1_outputs = MOCK_R1_OUTPUTS
+        instance.state.r3_report = MOCK_R3_REPORT
 
         client = TestClient(create_app())
-
         resp = client.post("/runs", json={"startup_idea": "AI Agent 平台"})
         assert resp.status_code == 200
         run_id = resp.json()["run_id"]
 
-        # Wait for background task to complete (max 5 seconds)
         for _ in range(50):
             run = get_run(get_session(), run_id)
             if run.status == "complete":
@@ -67,18 +68,18 @@ def test_end_to_end_run_completes_with_report():
 
 @pytest.mark.asyncio
 async def test_end_to_end_sse_stream_emits_events():
-    with patch("src.crew.StartupAnalyzerCrew") as MockCrew:
-        instance = MagicMock()
+    with patch("src.web.runner.DeliberationEngine") as MockEngine:
+        instance = MockEngine.return_value
         instance.run_round1.return_value = {}
         instance.run_round2.return_value = []
         instance.run_round3.return_value = {"decision": "Go"}
-        MockCrew.return_value = instance
+        instance.state.r1_outputs = {}
+        instance.state.r3_report = {"decision": "Go"}
 
         app = create_app()
         transport = httpx.ASGITransport(app=app)
 
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-            # Create a run
             resp = await client.post("/runs", json={"startup_idea": "x"})
             run_id = resp.json()["run_id"]
             bus = registry.get(run_id)
@@ -98,7 +99,7 @@ async def test_end_to_end_sse_stream_emits_events():
                                     break
 
             task = asyncio.create_task(read_stream())
-            await asyncio.sleep(0.05)  # let the subscriber register itself
+            await asyncio.sleep(0.05)
 
             bus.publish({"type": "test.event", "msg": "a"})
             bus.publish({"type": "run.complete", "run_id": run_id})

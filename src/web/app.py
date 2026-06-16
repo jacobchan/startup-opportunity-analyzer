@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 
-from src.web.routes import runs, stream, evidence
+from src.web.routes import runs, stream, evidence, resume
 
 
 def create_app() -> FastAPI:
@@ -15,6 +15,7 @@ def create_app() -> FastAPI:
     app.include_router(runs.router)
     app.include_router(stream.router)
     app.include_router(evidence.router)
+    app.include_router(resume.router)
 
     frontend_dist = Path(__file__).parent.parent.parent / "frontend" / "dist"
     if frontend_dist.exists():
