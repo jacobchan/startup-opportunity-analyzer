@@ -1,6 +1,7 @@
 // frontend/src/components/workspace/AgentAvatar.tsx
 import type { AgentSummary } from '../../lib/workspace-types'
 import { STATUS_LABEL } from '../../lib/workspace-constants'
+import './workspace.css'
 
 interface Props {
   agent: AgentSummary
