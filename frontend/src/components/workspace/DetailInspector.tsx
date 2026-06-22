@@ -2,7 +2,7 @@
 import './workspace.css'
 import { useEffect, useState } from 'react'
 import { AGENT_LABELS, STATUS_LABEL } from '../../lib/workspace-constants'
-import type { WorkspaceState, SelectedTarget, AgentTask } from '../../lib/workspace-types'
+import type { WorkspaceState, SelectedTarget, AgentTask, AgentTaskEvent } from '../../lib/workspace-types'
 import type { AgentName } from '../../lib/types'
 import EvidenceReport from '../EvidenceReport'
 import { ArtifactPreview } from './artifact-renderers'
@@ -25,7 +25,7 @@ export function DetailInspector({ state, selected, onSelect, report }: Props) {
           <EventPanel state={state} taskId={target.taskId} eventId={target.eventId} onSelect={onSelect} />
         )}
         {target.kind === 'artifact' && (
-          <ArtifactPanel state={state} taskId={target.taskId} report={report} onSelect={onSelect} />
+          <ArtifactPanel state={state} taskId={target.taskId} report={report} />
         )}
       </div>
     </aside>
@@ -102,7 +102,14 @@ function EventPanel({ state, taskId, eventId, onSelect }: {
   const task = findTask(state, taskId)
   const ev = task?.events.find((e) => e.id === eventId)
   if (!task || !ev) return <div className="ws-muted">事件不存在</div>
+  return <EventPanelInner task={task} ev={ev} onSelect={onSelect} />
+}
 
+function EventPanelInner({ task, ev, onSelect }: {
+  task: AgentTask
+  ev: AgentTaskEvent
+  onSelect: (t: SelectedTarget) => void
+}) {
   const payload = ev.payload as Record<string, unknown>
   const agentLabel = AGENT_LABELS[ev.agent]
   const evidenceId = payload.evidence_id as string | undefined
@@ -181,7 +188,6 @@ function ArtifactPanel({ state, taskId, report }: {
   state: WorkspaceState
   taskId: string
   report?: unknown
-  onSelect: (t: SelectedTarget) => void
 }) {
   const task = findTask(state, taskId)
   if (!task) return <div className="ws-muted">任务不存在</div>
