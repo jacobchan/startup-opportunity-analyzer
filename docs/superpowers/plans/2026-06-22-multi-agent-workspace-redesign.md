@@ -14,8 +14,7 @@
 - **No backend changes.** Pause / terminate / retry / send-instruction are frontend-only placeholders, rendered as `disabled` buttons with tooltip text "暂停功能即将支持" / "重试任务将在下一版支持" / "运行中追加指令将在下一版支持".
 - **Desktop-only.** `min-width: 1280px` on the workspace root; narrower viewports may scroll horizontally.
 - **Chinese-first UI.** All visible copy is Simplified Chinese. Code identifiers stay English.
-- **BEM-style CSS files**, one per component, co-located with the `.tsx`. Follow the `HistoryCard.css` pattern (CSS variables + BEM classes, no inline styles except dynamic values).
-- **Color palette is locked** to the CSS variables defined in Task 4. Do not introduce new colors inline.
+- **CSS strategy is mixed (relaxed from BEM-only):** Color tokens, spacing tokens, status colors, and shared utility classes (`.ws-dot`, `.ws-pill`, `.ws-clr-*`, etc.) live in `workspace.css` as CSS variables / BEM-style classes. Component layout (padding, flex, grid-template) MAY use inline `style={{...}}` — this matches the existing `App.tsx` / `AgentCard.tsx` / `ChallengeLog.tsx` pattern in the codebase. Status-color and animation hooks MUST go through className, never inline, so the palette stays centralized.
 - **Status colors**: running `#2563eb`, done `#08783e`, waiting `#86868b`, needs_input `#b45309`, failed `#c22f2f`.
 - **No animations** except the existing `history-pulse` keyframe (already defined in `HistoryCard.css`), reused only on (a) the left-sidebar status dot when `running` and (b) the current running task's left bar.
 - **Tests are co-located** with source (e.g., `AgentTeamSidebar.tsx` ↔ `AgentTeamSidebar.test.tsx`). Pure-function tests follow the same rule.
@@ -48,7 +47,7 @@ frontend/src/
     ├── HistoryList.tsx / *.test.tsx         # Unchanged
     ├── StartupForm.tsx / *.test.tsx         # Unchanged
     └── workspace/                           # Create dir (Task 4)
-        ├── workspace.css                    # Create (Task 4)
+        ├── workspace.css                    # Create (Task 4, no test)
         ├── Workspace.tsx                    # Create (Task 11)
         ├── WorkspaceTopbar.tsx              # Create (Task 6)
         ├── WorkspaceTopbar.test.tsx         # Create (Task 6)
@@ -1188,28 +1187,12 @@ git commit -m "feat(workspace): add useRunWorkspace hook with restore/dedupe"
 .ws-mono  { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 ```
 
-- [ ] **Step 2: Typecheck / smoke-test by importing it once in any test**
+- [ ] **Step 2: Commit**
 
-No direct test for CSS — just ensure it imports cleanly. Add a smoke test:
-
-Create `frontend/src/components/workspace/workspace.css.test.ts`:
-
-```ts
-import { describe, it, expect } from 'vitest'
-
-describe('workspace.css', () => {
-  it('is a valid CSS module reference (no test needed, just smoke)', () => {
-    expect(true).toBe(true)
-  })
-})
-```
-
-This is a no-op test that documents the CSS file's existence. We will rely on visual inspection.
-
-- [ ] **Step 3: Commit**
+No direct unit test for the CSS file itself — visual design tokens are validated by the component render tests that consume them and by manual inspection. Adding a `expect(true).toBe(true)` smoke test would be a test-hygiene defect.
 
 ```bash
-git add frontend/src/components/workspace/workspace.css frontend/src/components/workspace/workspace.css.test.ts
+git add frontend/src/components/workspace/workspace.css
 git commit -m "feat(workspace): add workspace.css design tokens and grid shell"
 ```
 
