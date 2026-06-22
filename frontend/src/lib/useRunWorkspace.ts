@@ -107,24 +107,44 @@ export function useRunWorkspace(
     // signal from the synthetic restore stream to the live stream.
     const hasRealSignal = events.some((e) => !isFromSynthetic(e) && e.type !== 'agent.end')
 
-    // If the incoming stream is synthetic-only (only agent.end events),
-    // prefer the canonical synthetic stream from the checkpoint so the
-    // hook is robust to callers that pass partial synthetic fragments.
-    let merged = events
-    if (isSyntheticOnly(events)) {
-      const synth = synthesizeFromCheckpoint(runInfo)
-      if (synth.length > 0) merged = synth
+    // Always seed from the persisted checkpoint so a stale or partial run
+    // (where the SSE stream never delivers new events) still shows the
+    // already-completed work. Real events override synth on a per-event
+    // basis via the `__synthetic__` tag below.
+    const synth = synthesizeFromCheckpoint(runInfo)
+
+    let merged: RunEvent[]
+    if (hasRealSignal) {
+      // Real stream has arrived. Drop every synthetic event so the live
+      // stream fully replaces the synthetic preview.
+      merged = events.filter((e) => !isFromSynthetic(e))
+    } else if (events.length === 0) {
+      // No SSE events yet (initial restore with empty events array).
+      // Seed entirely from the checkpoint.
+      merged = synth
+    } else if (isSyntheticOnly(events)) {
+      // Caller passed a partial synthetic fragment — prefer the canonical
+      // checkpoint-derived stream.
+      merged = synth.length > 0 ? synth : events
+    } else {
+      // Caller passed real events but none triggered hasRealSignal yet
+      // (e.g., a single agent.end from a real replay). Use the events as-is.
+      merged = events
     }
 
     let filtered: RunEvent[]
     if (hasRealSignal) {
-      // Real stream has arrived: drop every synthetic event (start or end)
-      // so the live stream fully replaces the synthetic preview.
-      filtered = merged.filter((e) => !isFromSynthetic(e))
+      filtered = merged
+    } else if (merged === synth) {
+      // synthesizeFromCheckpoint emits matched start+end pairs, so no
+      // additional pairing is needed. Calling pairSyntheticStarts here
+      // would inject duplicate start events and create orphan running
+      // tasks for every agent.
+      filtered = merged
     } else {
-      // Still in synthetic-only mode. Pair each bare agent.end with a
-      // synthetic agent.start so buildWorkspace opens the task before
-      // closing it (otherwise the done task would be ignored).
+      // Caller passed partial events (e.g. legacy `agent.end` only).
+      // Pair each bare agent.end with a synthetic agent.start so
+      // buildWorkspace opens the task before closing it.
       filtered = pairSyntheticStarts(merged)
     }
     return buildWorkspace(filtered, runInfo, report)
