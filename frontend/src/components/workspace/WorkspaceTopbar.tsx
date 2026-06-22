@@ -103,7 +103,7 @@ export function WorkspaceTopbar({ state, runInfo, errorMsg, report, onBack }: Pr
         ⤓ 导出
       </button>
 
-      {failed && errorMsg && (
+      {errorMsg && (
         <div style={{ position: 'absolute', top: 56, left: 0, right: 0, padding: '8px 24px', background: 'var(--ws-status-failed-bg)', color: 'var(--ws-status-failed)', fontSize: 12 }}>
           {errorMsg}
         </div>

@@ -2,10 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import StartupForm from './components/StartupForm'
 import HistoryList from './components/HistoryList'
 import { subscribeToRun } from './lib/sse'
-import type { RunEvent } from './lib/types'
-import AgentCard from './components/AgentCard'
-import ChallengeLog from './components/ChallengeLog'
-import EvidenceReport from './components/EvidenceReport'
+import type { RunEvent, RunInfo } from './lib/types'
+import { Workspace } from './components/workspace/Workspace'
 
 type View = 'form' | 'running' | 'report' | 'failed' | 'loading'
 
@@ -21,25 +19,12 @@ function clearRunIdFromURL() {
   window.history.replaceState({}, '', window.location.pathname)
 }
 
-function buildEventsFromR1Outputs(outputs: Record<string, unknown> | null): RunEvent[] {
-  if (!outputs) return []
-  const events: RunEvent[] = []
-  for (const [agent, output] of Object.entries(outputs)) {
-    events.push({
-      type: 'agent.end',
-      agent: agent as any,
-      round: 'round1',
-      output_summary: output,
-    })
-  }
-  return events
-}
-
 export default function App() {
   const [view, setView] = useState<View>(getRunIdFromURL() ? 'loading' : 'form')
   const [events, setEvents] = useState<RunEvent[]>([])
   const [report, setReport] = useState<any>(null)
   const [errorMsg, setErrorMsg] = useState<string>('')
+  const [runInfoState, setRunInfoState] = useState<RunInfo | null>(null)
   const restoreTried = useRef(false)
 
   // On mount: if URL has run_id, restore session from backend
@@ -54,27 +39,29 @@ export default function App() {
         const r = await fetch(`/runs/${runId}`)
         if (!r.ok) throw new Error('run not found')
         const info = await r.json()
+        setRunInfoState(info)
 
-        const synthEvents = buildEventsFromR1Outputs(info.round1_outputs ?? null)
+        // The engine checkpoints after every agent. round1_outputs is only a
+        // legacy snapshot written after all of R1 finishes, so prefer the
+        // live checkpoint when restoring a page mid-run. The workspace hook
+        // (useRunWorkspace) synthesizes preview events from the checkpoint.
 
         if (info.status === 'complete') {
           const repResp = await fetch(`/runs/${runId}/report`)
           const rep = await repResp.json()
-          setEvents(synthEvents)
           setReport(rep)
           setView('report')
           return
         }
 
         if (info.status === 'failed') {
-          setEvents(synthEvents)
           setErrorMsg('分析失败')
           setView('failed')
           return
         }
 
-        // running or queued — preload synthetic events + reconnect SSE
-        setEvents(synthEvents)
+        // running or queued — reconnect SSE. The hook will synthesize
+        // preview events from the checkpoint while we wait for live events.
         setView('running')
         subscribeToRun(
           runId,
@@ -105,8 +92,11 @@ export default function App() {
           },
         )
       } catch {
-        clearRunIdFromURL()
-        setView('form')
+        // A transient API/SSE outage must not erase the run identity and
+        // strand the user on the homepage. Keep the workspace + URL so a
+        // later refresh can restore from the persisted checkpoint.
+        setErrorMsg('暂时无法恢复分析状态，请稍后刷新重试')
+        setView('failed')
       }
     }
 
@@ -131,6 +121,7 @@ export default function App() {
     }
     const { run_id } = await resp.json()
     setRunIdInURL(run_id)
+    setRunInfoState({ run_id, startup_idea: idea, status: 'running', created_at: null, completed_at: null })
 
     const cleanup = subscribeToRun(
       run_id,
@@ -159,6 +150,7 @@ export default function App() {
     setEvents([])
     setReport(null)
     setErrorMsg('')
+    setRunInfoState(null)
   }
 
   if (view === 'loading') {
@@ -200,16 +192,12 @@ export default function App() {
   }
 
   return (
-    <div style={{ padding: 32, maxWidth: 1000, margin: '0 auto' }}>
-      <button onClick={goBackToForm} style={{ marginBottom: 16, background: 'none', border: '1px solid #ddd', borderRadius: 6, padding: '6px 12px', cursor: 'pointer' }}>← 重新开始</button>
-      {view === 'failed' && <div style={{ color: '#dc2626', marginBottom: 16, padding: 12, background: '#fef2f2', borderRadius: 8 }}>错误：{errorMsg}</div>}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 24 }}>
-        {(['market_analyst', 'competitor_researcher', 'finance_analyst', 'risk_reviewer', 'strategy_advisor'] as const).map((agent) => (
-          <AgentCard key={agent} agent={agent} events={events} />
-        ))}
-      </div>
-      <ChallengeLog events={events} />
-      {view === 'report' && report && <EvidenceReport report={report} />}
-    </div>
+    <Workspace
+      events={events}
+      report={report}
+      errorMsg={errorMsg}
+      runInfo={runInfoState}
+      onBack={goBackToForm}
+    />
   )
 }
