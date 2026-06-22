@@ -51,9 +51,9 @@ def _build_engine(run_id: str, startup_idea: str, publisher) -> DeliberationEngi
         "strategy_advisor": [],
     }
 
-    def challenge_factory(run_id_: str, agent_name: str, max_challenges: int = 3):
+    def challenge_factory(run_id: str, agent_name: str, max_challenges: int = 3):
         return make_challenge_tool(
-            run_id=run_id_, agent_name=agent_name, max_challenges=max_challenges,
+            run_id=run_id, agent_name=agent_name, max_challenges=max_challenges,
         )
 
     return DeliberationEngine(
