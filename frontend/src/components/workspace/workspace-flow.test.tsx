@@ -52,6 +52,7 @@ describe('Workspace flow', () => {
         errorMsg=""
         runInfo={{ run_id: 'r', startup_idea: 'AI Agent 创业方向', status: 'running', created_at: null, completed_at: null }}
         onBack={() => {}}
+        view="running"
       />,
     )
 
@@ -65,10 +66,11 @@ describe('Workspace flow', () => {
             errorMsg=""
             runInfo={{ run_id: 'r', startup_idea: 'AI Agent 创业方向', status: i === events.length ? 'complete' : 'running', created_at: null, completed_at: null }}
             onBack={() => {}}
+            view={i === events.length ? 'report' : 'running'}
           />,
         )
       })
-      const percentText = document.querySelector('.ws-mono.ws-faint')?.textContent ?? ''
+      const percentText = screen.getByTestId('ws-progress-percent').textContent ?? ''
       const m = percentText.match(/(\d+)%/)
       if (m) {
         const p = parseInt(m[1], 10)
@@ -97,6 +99,7 @@ describe('Workspace flow', () => {
         errorMsg=""
         runInfo={null}
         onBack={() => {}}
+        view="running"
       />,
     )
     // Right inspector shows Orchestrator label

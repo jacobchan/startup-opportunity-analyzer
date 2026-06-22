@@ -132,4 +132,24 @@ describe('buildWorkspace edge cases', () => {
     const r2a = s2.rounds[1].tasks.find((t) => t.agent === 'market_analyst' && t.subRound === 'A')!
     expect(r2a.events.some((e) => e.kind === 'challenge_responded')).toBe(true)
   })
+
+  it('routes tool events to the correct round when agent.start arrives before round.transition', () => {
+    const events: RunEvent[] = [
+      ev({ type: 'run.start', run_id: 'r', startup_idea: 'x' }),
+      ev({ type: 'agent.start', agent: 'market_analyst', round: 'round1' }),
+      ev({ type: 'agent.end', agent: 'market_analyst', round: 'round1', output_summary: {} }),
+      // R2 agent.start arrives BEFORE round.transition (out of order)
+      ev({ type: 'agent.start', agent: 'market_analyst', round: 'round2' }),
+      ev({ type: 'tool.start', agent: 'market_analyst', tool: 'search', input_preview: 'test' }),
+      ev({ type: 'round.transition', from_round: 'round1', to_round: 'round2' }),
+    ]
+    const state = buildWorkspace(events, null, null)
+    // The tool.start should be routed to R2 task, not R1
+    const r2Task = state.rounds[1].tasks.find((t) => t.agent === 'market_analyst')
+    expect(r2Task).toBeTruthy()
+    expect(r2Task!.events.some((e) => e.kind === 'tool')).toBe(true)
+    // R1 task should NOT have the misrouted tool event
+    const r1Task = state.rounds[0].tasks.find((t) => t.agent === 'market_analyst')
+    expect(r1Task!.events.some((e) => e.kind === 'tool')).toBe(false)
+  })
 })

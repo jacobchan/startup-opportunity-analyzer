@@ -6,6 +6,12 @@ export interface RunInfo {
   status: RunStatus
   created_at: string | null
   completed_at: string | null
+  deliberation_state?: {
+    current_round?: string
+    r1_outputs?: Record<string, unknown>
+    r1_completed_agents?: string[]
+  }
+  round1_outputs?: Record<string, unknown> | null
 }
 
 export type AgentName =

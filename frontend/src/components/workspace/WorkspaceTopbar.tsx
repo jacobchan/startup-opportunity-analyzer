@@ -9,6 +9,7 @@ interface Props {
   errorMsg: string
   report?: unknown
   onBack: () => void
+  view: 'running' | 'report' | 'failed'
 }
 
 const STATUS_PILL_LABEL: Record<WorkspaceState['status'], string> = {
@@ -18,10 +19,9 @@ const STATUS_PILL_LABEL: Record<WorkspaceState['status'], string> = {
   failed: '分析失败',
 }
 
-export function WorkspaceTopbar({ state, runInfo, errorMsg, report, onBack }: Props) {
+export function WorkspaceTopbar({ state, runInfo, errorMsg, report, onBack, view }: Props) {
   const percent = state.progress.percent
-  const failed = state.status === 'failed'
-  const barCls = failed ? 'ws-clr-bg-failed' : state.status === 'done' ? 'ws-clr-bg-done' : 'ws-clr-bg-running'
+  const barCls = state.status === 'failed' ? 'ws-clr-bg-failed' : state.status === 'done' ? 'ws-clr-bg-done' : 'ws-clr-bg-running'
 
   function handleExport() {
     if (!report || !runInfo) return
@@ -81,7 +81,7 @@ export function WorkspaceTopbar({ state, runInfo, errorMsg, report, onBack }: Pr
         }}>
           <div className={barCls} style={{ width: `${percent}%`, height: '100%', transition: 'width 160ms ease, background 160ms ease' }} />
         </div>
-        <span className="ws-mono ws-faint" style={{ fontSize: 12 }}>{percent}%</span>
+        <span data-testid="ws-progress-percent" className="ws-mono ws-faint" style={{ fontSize: 12 }}>{percent}%</span>
       </div>
 
       <span className={`ws-pill ws-clr-${state.status}`} style={{ background: 'var(--ws-bg)' }}>
@@ -103,7 +103,7 @@ export function WorkspaceTopbar({ state, runInfo, errorMsg, report, onBack }: Pr
         ⤓ 导出
       </button>
 
-      {errorMsg && (
+      {view === 'failed' && errorMsg && (
         <div style={{ position: 'absolute', top: 56, left: 0, right: 0, padding: '8px 24px', background: 'var(--ws-status-failed-bg)', color: 'var(--ws-status-failed)', fontSize: 12 }}>
           {errorMsg}
         </div>

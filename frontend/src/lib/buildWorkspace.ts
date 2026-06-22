@@ -28,6 +28,8 @@ const ALL_AGENTS: AgentName[] = [
 
 const ORCHESTRATOR: AgentName = 'strategy_advisor'
 
+const ROUND_ORDER: RoundId[] = ['r1', 'r2', 'r3']
+
 function emptyRounds(): Round[] {
   return (['r1', 'r2', 'r3'] as RoundId[]).map((id) => ({
     id,
@@ -212,6 +214,11 @@ export function buildWorkspace(
           roundRaw === 'round1' || roundRaw === 'r1' ? 'r1'
           : roundRaw === 'round2' || roundRaw === 'r2' ? 'r2'
           : 'r3'
+        // Advance currentRoundId if the event's round is ahead (e.g. agent.start
+        // for round2 arrives before the round.transition event).
+        if (ROUND_ORDER.indexOf(round) > ROUND_ORDER.indexOf(currentRoundId)) {
+          currentRoundId = round
+        }
         const task = routeAgentStart(round, agent)
         appendEvent(task, 'start', ev as any)
         break

@@ -55,15 +55,23 @@ function RoundBlock({ round, selected, onSelect, report }: {
 }) {
   const defaultOpen = round.status === 'running' || round.status === 'done' || round.status === 'failed'
   const [open, setOpen] = useState(defaultOpen)
+  const [userToggled, setUserToggled] = useState(false)
   const lastStatusRef = useRef(round.status)
   useEffect(() => {
     if (round.status !== lastStatusRef.current) {
       lastStatusRef.current = round.status
-      setOpen(round.status === 'running' || round.status === 'done' || round.status === 'failed')
+      if (!userToggled) {
+        setOpen(round.status === 'running' || round.status === 'done' || round.status === 'failed')
+      }
     }
-  }, [round.status])
+  }, [round.status, userToggled])
 
   const canCollapse = round.status !== 'failed'
+
+  const handleToggle = () => {
+    setUserToggled(true)
+    setOpen((o) => !o)
+  }
 
   return (
     <section style={{ marginBottom: 24 }}>
@@ -77,7 +85,7 @@ function RoundBlock({ round, selected, onSelect, report }: {
         {canCollapse && (
           <button
             type="button"
-            onClick={() => setOpen((o) => !o)}
+            onClick={handleToggle}
             className="ws-faint"
             style={{ background: 'none', border: 0, cursor: 'pointer', fontSize: 14 }}
             aria-label={open ? '折叠' : '展开'}

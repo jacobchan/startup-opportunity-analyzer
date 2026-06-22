@@ -198,6 +198,7 @@ export default function App() {
       errorMsg={errorMsg}
       runInfo={runInfoState}
       onBack={goBackToForm}
+      view={view as 'running' | 'report' | 'failed'}
     />
   )
 }

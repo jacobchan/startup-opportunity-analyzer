@@ -18,8 +18,7 @@ import type { WorkspaceState, SelectedTarget } from './workspace-types'
  */
 export function synthesizeFromCheckpoint(runInfo: RunInfo | null): RunEvent[] {
   if (!runInfo) return []
-  const anyInfo = runInfo as any
-  const outputs = anyInfo.deliberation_state?.r1_outputs ?? anyInfo.round1_outputs ?? null
+  const outputs = runInfo.deliberation_state?.r1_outputs ?? runInfo.round1_outputs ?? null
   if (!outputs || typeof outputs !== 'object') return []
   const events: RunEvent[] = []
   for (const [agent, output] of Object.entries(outputs as Record<string, unknown>)) {
