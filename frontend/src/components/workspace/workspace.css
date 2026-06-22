@@ -1,0 +1,133 @@
+/* frontend/src/components/workspace/workspace.css */
+
+:root {
+  --ws-bg:            #f7f7f5;
+  --ws-surface:       #ffffff;
+  --ws-border:        #e8e8e8;
+  --ws-border-strong: #d2d2d2;
+  --ws-text:          #1d1d1f;
+  --ws-text-muted:    #737377;
+  --ws-text-faint:    #a1a1a6;
+  --ws-radius:        10px;
+  --ws-radius-sm:     6px;
+  --ws-shadow-soft:   0 1px 2px rgba(0, 0, 0, 0.03);
+
+  --ws-status-running:      #2563eb;
+  --ws-status-running-bg:   #eff6ff;
+  --ws-status-done:         #08783e;
+  --ws-status-done-bg:      #edf8f2;
+  --ws-status-waiting:      #86868b;
+  --ws-status-waiting-bg:   #f2f4f7;
+  --ws-status-needs_input:  #b45309;
+  --ws-status-needs_input-bg:#fff5e8;
+  --ws-status-failed:       #c22f2f;
+  --ws-status-failed-bg:    #fff0f0;
+
+  --ws-font-sans: -apple-system, "PingFang SC", "Microsoft YaHei",
+                  "Helvetica Neue", Arial, sans-serif;
+}
+
+.ws-shell {
+  min-width: 1280px;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--ws-bg);
+  color: var(--ws-text);
+  font-family: var(--ws-font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.ws-body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 240px 1fr 320px;
+  min-height: 0;
+}
+
+.ws-col-left,
+.ws-col-center,
+.ws-col-right {
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.ws-col-left  { border-right: 1px solid var(--ws-border); background: var(--ws-surface); }
+.ws-col-right { border-left:  1px solid var(--ws-border); background: var(--ws-surface); }
+.ws-col-center{ background: var(--ws-bg); }
+
+.ws-scroll {
+  overflow-y: auto;
+}
+
+/* Status dot shared building block */
+.ws-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.ws-dot--lg { width: 12px; height: 12px; }
+.ws-dot--running { animation: history-pulse 1.8s ease-in-out infinite; }
+.ws-dot--waiting {
+  background: transparent;
+  border: 2px solid currentColor;
+}
+
+/* Status color utility — applied to a wrapper that sets `color` */
+.ws-clr-pending      { color: var(--ws-text-faint); }
+.ws-clr-running      { color: var(--ws-status-running); }
+.ws-clr-done         { color: var(--ws-status-done); }
+.ws-clr-waiting      { color: var(--ws-status-waiting); }
+.ws-clr-needs_input  { color: var(--ws-status-needs_input); }
+.ws-clr-failed       { color: var(--ws-status-failed); }
+
+.ws-clr-bg-pending      { background: var(--ws-text-faint); }
+.ws-clr-bg-running      { background: var(--ws-status-running); }
+.ws-clr-bg-done         { background: var(--ws-status-done); }
+.ws-clr-bg-waiting      { background: var(--ws-status-waiting); }
+.ws-clr-bg-needs_input  { background: var(--ws-status-needs_input); }
+.ws-clr-bg-failed       { background: var(--ws-status-failed); }
+
+/* Shared pill badge (smaller variant of HistoryCard) */
+.ws-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.ws-pill__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.ws-pill--running .ws-pill__dot { animation: history-pulse 1.8s ease-in-out infinite; }
+
+.ws-section-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ws-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ws-divider {
+  height: 1px;
+  background: var(--ws-border);
+  margin: 16px 0;
+}
+
+.ws-muted { color: var(--ws-text-muted); }
+.ws-faint { color: var(--ws-text-faint); }
+.ws-mono  { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
