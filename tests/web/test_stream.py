@@ -82,5 +82,5 @@ async def test_stream_stops_on_run_complete(app_with_patched_runner):
         bus.publish({"type": "run.complete", "run_id": run_id})
         await asyncio.wait_for(task, timeout=5)
 
-        data_lines = [l for l in lines if l.startswith("data:")]
+        data_lines = [line for line in lines if line.startswith("data:")]
         assert len(data_lines) >= 1

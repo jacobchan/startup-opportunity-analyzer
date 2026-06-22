@@ -135,3 +135,104 @@ def test_task_context_dependencies():
     assert competitor.id in strategy_ctx_ids, "strategy should depend on competitor"
     assert finance.id in strategy_ctx_ids, "strategy should depend on finance"
     assert risk.id in strategy_ctx_ids, "strategy should depend on risk"
+
+
+def test_tasks_yaml_json_schemas_are_valid():
+    """Tasks that ask the LLM to emit JSON must contain parseable JSON
+    in their expected_output. Guards against the historical bug where
+    duplicated \{{\ would smuggle invalid syntax into the LLM prompt.
+    """
+    from pathlib import Path
+    import json
+    import yaml
+
+    cfg = Path(__file__).parent.parent / "src" / "config" / "tasks.yaml"
+    parsed = yaml.safe_load(cfg.read_text(encoding="utf-8"))
+
+    # Only check tasks whose expected_output embeds a JSON object.
+    json_tasks = [
+        name for name, body in parsed.items()
+        if "{" in body.get("expected_output", "")
+    ]
+    # round2_challenge has no JSON schema (free-form challenge instructions).
+    assert "market_analysis" in json_tasks
+    assert "round2_challenge" not in json_tasks
+
+    for name in json_tasks:
+        body = parsed[name]["expected_output"]
+        first = body.find("{")
+        last = body.rfind("}")
+        json_block = body[first:last + 1]
+        opens = json_block.count("{")
+        closes = json_block.count("}")
+        assert opens == closes, (
+            f"{name}: unbalanced braces ({opens} open vs {closes} close)"
+        )
+        # The schema must be parseable JSON so the LLM receives a valid template.
+        json.loads(json_block)
+
+
+def test_tasks_yaml_have_startup_idea_placeholder():
+    """Each task description must accept {startup_idea} for runtime injection."""
+    from pathlib import Path
+    import re
+
+    cfg = Path(__file__).parent.parent / "src" / "config" / "tasks.yaml"
+    text = cfg.read_text(encoding="utf-8")
+    for name in ("market_analysis", "competitor_analysis", "finance_analysis",
+                 "risk_review", "strategy_report", "round2_challenge"):
+        m = re.search(
+            rf"^{name}:\s*\n.*?description:\s*>\s*\n(?P<body>.*?)(?=^  expected_output:|\Z)",
+            text, re.MULTILINE | re.DOTALL,
+        )
+        assert m, f"could not extract description for {name}"
+        assert "{startup_idea}" in m.group("body"), (
+            f"{name}: description must reference {{startup_idea}}"
+        )
+
+
+def test_extract_json_strips_markdown_code_fence():
+    """LLM outputs often wrap JSON in ```json ... ``` blocks.
+    _extract_json should strip the fence and return the inner content.
+    """
+    from src.crew import _extract_json
+
+    raw = '```json\n{"a": 1}\n```'
+    assert _extract_json(raw) == '{"a": 1}'
+
+
+def test_extract_json_strips_bare_code_fence():
+    """Some LLMs omit the 'json' language tag. Handle that too."""
+    from src.crew import _extract_json
+
+    raw = '```\n{"a": 1}\n```'
+    assert _extract_json(raw) == '{"a": 1}'
+
+
+def test_extract_json_passthrough_for_plain_json():
+    from src.crew import _extract_json
+
+    raw = '{"a": 1}'
+    assert _extract_json(raw) == '{"a": 1}'
+
+
+def test_parse_json_returns_dict_on_valid_json():
+    from src.crew import _parse_json
+
+    out = _parse_json('{"decision": "Go", "score": 0.9}')
+    assert out == {"decision": "Go", "score": 0.9}
+
+
+def test_parse_json_falls_back_to_raw_on_invalid_json():
+    from src.crew import _parse_json
+
+    out = _parse_json("This is not JSON at all")
+    assert out["parse_error"] is True
+    assert "This is not JSON at all" in out["raw_output"]
+
+
+def test_parse_json_strips_markdown_before_parsing():
+    from src.crew import _parse_json
+
+    out = _parse_json('```json\n{"k": "v"}\n```')
+    assert out == {"k": "v"}

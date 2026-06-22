@@ -2,10 +2,10 @@
 
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from src.web.app import create_app
-from src.storage import create_run, get_run, get_session
+from src.storage import create_run, get_session
 
 
 @pytest.fixture

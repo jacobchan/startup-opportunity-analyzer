@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any, AsyncIterator
+from typing import AsyncIterator
 
 
 class EventBus:
@@ -7,14 +7,19 @@ class EventBus:
 
     def __init__(self):
         self._subscribers: list[asyncio.Queue] = []
+        self._terminal_event: dict | None = None
 
     def publish(self, event: dict) -> None:
+        if event.get("type") in ("run.complete", "run.failed"):
+            self._terminal_event = event
         for q in self._subscribers:
             q.put_nowait(event)
 
     async def subscribe(self) -> AsyncIterator[dict]:
         q: asyncio.Queue = asyncio.Queue()
         self._subscribers.append(q)
+        if self._terminal_event is not None:
+            q.put_nowait(self._terminal_event)
         try:
             while True:
                 event = await q.get()

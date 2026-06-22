@@ -1,3 +1,6 @@
+import { useState } from 'react'
+import './HistoryCard.css'
+
 export interface HistoryRun {
   run_id: string
   startup_idea: string
@@ -28,142 +31,107 @@ function formatTime(iso: string | null): string {
   return `${d.getMonth() + 1}月${d.getDate()}日`
 }
 
-const decisionConfig: Record<string, { bg: string; fg: string; dot: string }> = {
-  'Go':             { bg: '#ecfdf3', fg: '#0e6245', dot: '#16a34a' },
-  'No-Go':          { bg: '#fef2f2', fg: '#991b1b', dot: '#dc2626' },
-  'Conditional-Go': { bg: '#fff7ed', fg: '#7c2d12', dot: '#ea580c' },
+const decisionConfig: Record<string, { tone: string; label: string }> = {
+  Go: { tone: 'success', label: 'Go' },
+  'No-Go': { tone: 'danger', label: 'No-Go' },
+  'Conditional-Go': { tone: 'warning', label: 'Conditional-Go' },
 }
 
-const statusConfig: Record<string, { bg: string; fg: string; label: string }> = {
-  running: { bg: '#eff6ff', fg: '#1e40af', label: '进行中' },
-  queued:  { bg: '#eff6ff', fg: '#1e40af', label: '排队中' },
-  failed:  { bg: '#fef2f2', fg: '#991b1b', label: '失败' },
+const statusConfig: Record<string, { tone: string; label: string }> = {
+  complete: { tone: 'success', label: '已完成' },
+  running: { tone: 'running', label: '进行中' },
+  queued: { tone: 'queued', label: '排队中' },
+  partial: { tone: 'warning', label: '部分完成' },
+  failed: { tone: 'danger', label: '失败' },
 }
 
 export default function HistoryCard({ run, onRerun, onDelete, onClick }: Props) {
+  const [menuOpen, setMenuOpen] = useState(false)
   const isComplete = run.status === 'complete'
-  const decision = run.decision ? decisionConfig[run.decision] : null
-  const status = statusConfig[run.status] ?? statusConfig.queued
+  const isActive = run.status === 'running' || run.status === 'queued'
+  const badge = isComplete && run.decision
+    ? decisionConfig[run.decision] ?? statusConfig.complete
+    : statusConfig[run.status] ?? statusConfig.queued
 
   const summary = isComplete
     ? run.executive_summary
     : run.status === 'failed'
       ? '分析未能完成'
-      : run.status === 'running'
-        ? 'AI 正在分析中...'
-        : '等待开始分析'
+      : run.status === 'partial'
+        ? '已有部分分析结果，可继续查看'
+        : run.status === 'running'
+          ? 'AI 正在分析中…'
+          : '等待开始分析'
+
+  function openRun() {
+    onClick(run.run_id)
+  }
 
   return (
-    <div
-      onClick={() => isComplete && onClick(run.run_id)}
-      style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
-        padding: '20px 24px',
-        border: '1px solid #eaeaea',
-        borderRadius: 12,
-        cursor: isComplete ? 'pointer' : 'default',
-        background: '#fff',
-        transition: 'border-color 120ms ease, box-shadow 120ms ease',
-      }}
-      onMouseEnter={(e) => {
-        if (isComplete) {
-          e.currentTarget.style.borderColor = '#d4d4d4'
-          e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.04)'
-        }
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.borderColor = '#eaeaea'
-        e.currentTarget.style.boxShadow = 'none'
-      }}
+    <article
+      className="history-card"
+      onClick={openRun}
     >
-      <div style={{ flex: 1, minWidth: 0 }}>
-        {/* Top row: idea + badge */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-          <span style={{
-            fontSize: 15, fontWeight: 500, color: '#111',
-            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-            maxWidth: 340,
-          }}>
-            {run.startup_idea.length > 40 ? run.startup_idea.slice(0, 40) + '...' : run.startup_idea}
+      <div className="history-card__content">
+        <div className="history-card__heading">
+          <h3 className="history-card__title" title={run.startup_idea}>
+            {run.startup_idea}
+          </h3>
+          <span className={`history-card__badge history-card__badge--${badge.tone}`}>
+            <span className="history-card__dot" aria-hidden="true" />
+            {badge.label}
           </span>
-
-          {isComplete && decision && (
-            <span style={{
-              display: 'inline-flex', alignItems: 'center', gap: 5,
-              background: decision.bg, color: decision.fg,
-              padding: '2px 10px', borderRadius: 20, fontSize: 12, fontWeight: 500,
-            }}>
-              <span style={{
-                width: 6, height: 6, borderRadius: '50%', background: decision.dot,
-              }} />
-              {run.decision}
-            </span>
-          )}
-
-          {!isComplete && (
-            <span style={{
-              display: 'inline-flex', alignItems: 'center', gap: 5,
-              background: status.bg, color: status.fg,
-              padding: '2px 10px', borderRadius: 20, fontSize: 12, fontWeight: 500,
-            }}>
-              {run.status === 'running' && (
-                <span style={{
-                  width: 6, height: 6, borderRadius: '50%',
-                  background: '#3b82f6',
-                  animation: 'pulse 2s ease-in-out infinite',
-                }} />
-              )}
-              {status.label}
-            </span>
-          )}
         </div>
 
-        {/* Summary */}
-        <p style={{
-          color: run.status === 'running' || run.status === 'queued' ? '#9e9e9e' : '#5f5f5f',
-          fontSize: 13, lineHeight: 1.5, margin: 0,
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          maxWidth: 460,
-        }}>
-          {summary ?? ''}
-        </p>
-
-        {/* Time */}
-        <span style={{ color: '#b0b0b0', fontSize: 12, marginTop: 6, display: 'inline-block' }}>
+        <p className="history-card__summary">{summary ?? ''}</p>
+        <time className="history-card__time" dateTime={run.created_at ?? undefined}>
           {formatTime(run.created_at)}
-        </span>
+        </time>
       </div>
 
-      {/* Actions */}
-      <div style={{ display: 'flex', gap: 8, marginLeft: 16, flexShrink: 0 }}
-           onClick={(e) => e.stopPropagation()}>
-        <button
-          onClick={() => onRerun(run.startup_idea)}
-          style={{
-            padding: '6px 14px', fontSize: 12, fontWeight: 500,
-            border: '1px solid #e0e0e0', borderRadius: 8,
-            cursor: 'pointer', background: '#fff', color: '#333',
-            transition: 'background 120ms ease',
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = '#f5f5f5' }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = '#fff' }}
-        >
-          重跑
+      <div className="history-card__actions" onClick={(event) => event.stopPropagation()}>
+        <button className="history-card__open" onClick={openRun}>
+          {isComplete ? '查看报告' : '查看进度'}
+          <span aria-hidden="true">›</span>
         </button>
-        <button
-          onClick={() => onDelete(run.run_id)}
-          style={{
-            padding: '6px 14px', fontSize: 12, fontWeight: 500,
-            border: '1px solid #fecaca', borderRadius: 8,
-            cursor: 'pointer', background: '#fff', color: '#dc2626',
-            transition: 'background 120ms ease',
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = '#fef2f2' }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = '#fff' }}
-        >
-          删除
-        </button>
+
+        <div className="history-card__more">
+          <button
+            className="history-card__more-button"
+            aria-label="更多操作"
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen((open) => !open)}
+          >
+            •••
+          </button>
+
+          {menuOpen && (
+            <div className="history-card__menu" role="menu">
+              {!isActive && (
+                <button
+                  role="menuitem"
+                  onClick={() => {
+                    setMenuOpen(false)
+                    onRerun(run.startup_idea)
+                  }}
+                >
+                  重新分析
+                </button>
+              )}
+              <button
+                className="history-card__delete"
+                role="menuitem"
+                onClick={() => {
+                  setMenuOpen(false)
+                  onDelete(run.run_id)
+                }}
+              >
+                删除记录
+              </button>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+    </article>
   )
 }

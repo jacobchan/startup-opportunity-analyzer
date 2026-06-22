@@ -90,6 +90,27 @@ export default function EvidenceReport({ report }: Props) {
         </div>
       )}
 
+      {report?.challenge_disposition && (report.challenge_disposition.modified?.length > 0 || report.challenge_disposition.accepted?.length > 0) && (
+        <div style={{ marginTop: 16, padding: 12, background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 8 }}>
+          <strong style={{ fontSize: 14 }}>经挑战修正的关键结论：</strong>
+          <div style={{ fontSize: 12, color: '#666', marginTop: 4, marginBottom: 8 }}>
+            R2 交叉辩论中，以下论断被其他 agent 接受 (accepted) 或修正 (modified)：
+          </div>
+          {[...(report.challenge_disposition.modified || []), ...(report.challenge_disposition.accepted || [])].map((c: any, i: number) => (
+            <div key={i} style={{ marginTop: 8, padding: 8, background: '#fff', borderRadius: 4 }}>
+              <div style={{ fontSize: 12 }}>
+                <strong>{c.issuer || '其他 agent'}</strong> 挑战了:
+                <em style={{ marginLeft: 4 }}>“{c.claim}”</em>
+              </div>
+              <div style={{ fontSize: 12, color: '#666', marginTop: 2 }}>
+                回应: {c.response}
+              </div>
+              <code style={{ fontSize: 11, color: '#92400e' }}>[{c.challenge_id}]</code>
+            </div>
+          ))}
+        </div>
+      )}
+
       {report?.next_steps?.length > 0 && (
         <div style={{ marginTop: 16 }}>
           <strong style={{ fontSize: 14 }}>下一步行动：</strong>

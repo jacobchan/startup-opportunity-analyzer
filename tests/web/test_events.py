@@ -1,5 +1,5 @@
 import asyncio
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -28,6 +28,19 @@ async def test_event_bus_publishes_to_subscribers():
 def test_event_bus_publish_with_no_subscribers():
     bus = EventBus()
     bus.publish({"type": "x"})  # should not crash
+
+
+@pytest.mark.asyncio
+async def test_event_bus_replays_terminal_event_to_late_subscriber():
+    bus = EventBus()
+    terminal = {"type": "run.complete", "run_id": "run-1"}
+    bus.publish(terminal)
+
+    subscription = bus.subscribe()
+    received = await anext(subscription)
+    await subscription.aclose()
+
+    assert received == terminal
 
 
 @pytest.mark.asyncio

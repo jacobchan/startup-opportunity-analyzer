@@ -17,11 +17,8 @@ from src.deliberation.engine import DeliberationEngine
 from src.deliberation.state import (
     ROUND_1,
     ROUND_2,
-    ROUND_3,
     ROUND_COMPLETE,
     ROUND_FAILED,
-    ROUND_NONE,
-    EngineState,
 )
 from src.storage import create_run
 from src.storage.db import init_db
@@ -396,7 +393,7 @@ def test_engine_marks_failed_on_exception(
     tools_map, challenge_tool_factory, publisher,
 ):
     agent_log: list[str] = []
-    def boom(agents, tasks, verbose=True):
+    def boom(agents, tasks, verbose=True, **kwargs):
         crew = MagicMock()
         crew.kickoff.side_effect = RuntimeError("LLM timeout")
         return crew
@@ -413,3 +410,67 @@ def test_engine_marks_failed_on_exception(
     loaded = CheckpointStore(session_factory).load(run_id)
     assert loaded.current_round == ROUND_FAILED
     assert "LLM timeout" in loaded.error
+
+
+def test_step_callback_publishes_tool_events(
+    session_factory, run_id, mock_llm, agents_config, tasks_config,
+    tools_map, challenge_tool_factory, publisher,
+):
+    """The engine should hand CrewAI a step_callback that publishes
+    tool.start events for each tool call. AgentFinish also produces a
+    tool.end event so the UI can stop showing the spinner.
+    """
+    from crewai.utilities.agent_utils import AgentAction, AgentFinish
+
+    events: list[dict] = []
+    engine = _build_engine(
+        session_factory, run_id, mock_llm, agents_config, tasks_config,
+        tools_map, challenge_tool_factory, events.append, [],
+    )
+
+    cb = engine._make_step_callback("market_analyst")
+
+    # Tool call: AgentAction
+    action = AgentAction(
+        thought="search the web", tool="search",
+        tool_input="AI Agent 平台 市场规模", text="searching", result=None,
+    )
+    cb(action)
+    assert any(e["type"] == "tool.start" and e["agent"] == "market_analyst"
+               and e["tool"] == "search" for e in events), events
+
+    # Final answer: AgentFinish does NOT trigger a tool.end in our
+    # current model — the agent.end is published by the engine itself.
+    finish = AgentFinish(thought="done", output="analysis complete", text="analysis complete")
+    cb(finish)
+    assert not any(e["type"] == "tool.end" for e in events), events
+
+
+def test_engine_publishes_agent_end_on_failure(
+    session_factory, run_id, mock_llm, agents_config, tasks_config,
+    tools_map, challenge_tool_factory, publisher,
+):
+    """If a R1 agent's kickoff raises, the engine should still publish
+    an agent.end with the error so the SSE consumer can stop its
+    per-agent spinner. Otherwise the UI sits on a perpetual loading
+    state until the run.failed event arrives.
+    """
+    with patch("src.deliberation.engine.Crew") as MockCrew:
+        def side_effect(agents, tasks, verbose=True, **kwargs):
+            m = MagicMock()
+            m.kickoff.side_effect = RuntimeError("LLM 502")
+            return m
+        MockCrew.side_effect = side_effect
+
+        engine = _build_engine(
+            session_factory, run_id, mock_llm, agents_config, tasks_config,
+            tools_map, challenge_tool_factory, publisher, [],
+        )
+        with pytest.raises(RuntimeError, match="LLM 502"):
+            engine.run_round1()
+
+    end_events = [e for e in publisher.events if e.get("type") == "agent.end"]
+    assert len(end_events) >= 1
+    assert end_events[0]["agent"] == "market_analyst"
+    assert "error" in end_events[0]["output_summary"]
+    assert "LLM 502" in end_events[0]["output_summary"]["error"]

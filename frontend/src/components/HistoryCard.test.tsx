@@ -70,7 +70,8 @@ describe('HistoryCard', () => {
         onClick={vi.fn()}
       />
     )
-    fireEvent.click(screen.getByText('重跑'))
+    fireEvent.click(screen.getByRole('button', { name: '更多操作' }))
+    fireEvent.click(screen.getByText('重新分析'))
     expect(onRerun).toHaveBeenCalledWith('AI Agent 客服平台')
   })
 
@@ -84,7 +85,38 @@ describe('HistoryCard', () => {
         onClick={vi.fn()}
       />
     )
-    fireEvent.click(screen.getByText('删除'))
+    fireEvent.click(screen.getByRole('button', { name: '更多操作' }))
+    fireEvent.click(screen.getByText('删除记录'))
     expect(onDelete).toHaveBeenCalledWith('run-1')
+  })
+
+  it('opens a running run so its progress can be restored', () => {
+    const onClick = vi.fn()
+    render(
+      <HistoryCard
+        run={runningRun}
+        onRerun={vi.fn()}
+        onDelete={vi.fn()}
+        onClick={onClick}
+      />
+    )
+
+    fireEvent.click(screen.getByText(/跨境电商选品工具/))
+    expect(onClick).toHaveBeenCalledWith('run-2')
+  })
+
+  it('does not offer a duplicate rerun while a run is active', () => {
+    render(
+      <HistoryCard
+        run={runningRun}
+        onRerun={vi.fn()}
+        onDelete={vi.fn()}
+        onClick={vi.fn()}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '更多操作' }))
+    expect(screen.queryByText('重新分析')).not.toBeInTheDocument()
+    expect(screen.getByText('删除记录')).toBeInTheDocument()
   })
 })

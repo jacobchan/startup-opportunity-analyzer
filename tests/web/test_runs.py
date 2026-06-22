@@ -2,6 +2,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.web.app import create_app
+from src.storage import get_session
+from src.storage.models import Run
 
 
 @pytest.fixture
@@ -28,6 +30,28 @@ def test_get_run_returns_status(client):
     assert resp2.status_code == 200
     assert resp2.json()["run_id"] == run_id
     assert resp2.json()["status"] in ("queued", "running", "complete")
+
+
+def test_get_run_returns_persisted_deliberation_progress(client):
+    resp = client.post("/runs", json={"startup_idea": "x"})
+    run_id = resp.json()["run_id"]
+    session = get_session()
+    try:
+        run = session.get(Run, run_id)
+        run.deliberation_state = {
+            "current_round": "round1",
+            "r1_outputs": {"market_analyst": {"tam": "100亿"}},
+            "r1_completed_agents": ["market_analyst"],
+        }
+        session.commit()
+    finally:
+        session.close()
+
+    restored = client.get(f"/runs/{run_id}")
+
+    assert restored.status_code == 200
+    assert restored.json()["deliberation_state"]["current_round"] == "round1"
+    assert restored.json()["deliberation_state"]["r1_completed_agents"] == ["market_analyst"]
 
 
 def test_get_run_404(client):

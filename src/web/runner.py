@@ -14,25 +14,20 @@ update ``Run.status`` at the boundaries.
 from __future__ import annotations
 
 from src.deliberation.engine import DeliberationEngine
-from src.deliberation.state import ROUND_COMPLETE, ROUND_FAILED
 from src.storage import update_run_status, get_session, get_run
 from src.storage.models import Run
 from src.crew import StartupAnalyzerCrew
-from src.config.settings import LLM_MODEL, DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL
+from src.config.settings import build_llm
 from crewai import LLM
 from src.tools.search_tool import search_tool
 from src.tools.web_scraper import scrape_tool
 from src.tools.challenge_tool import make_challenge_tool
 
 
+# ``_build_llm`` is a thin alias for the shared factory. Kept under its
+# original name so existing tests that patch this symbol keep working.
 def _build_llm() -> LLM:
-    if "deepseek" in LLM_MODEL:
-        return LLM(
-            model=LLM_MODEL,
-            api_key=DEEPSEEK_API_KEY,
-            base_url=DEEPSEEK_BASE_URL,
-        )
-    return LLM(model=LLM_MODEL)
+    return build_llm()
 
 
 def _build_engine(run_id: str, startup_idea: str, publisher) -> DeliberationEngine:
@@ -104,6 +99,11 @@ def _persist_final_report(run_id: str, report: dict) -> None:
 def run_deliberation(run_id: str, startup_idea: str, event_publisher) -> dict:
     """Execute a fresh 3-round deliberation. Returns the final report dict."""
     update_run_status(get_session(), run_id, "running")
+    # Emit a single run.start event so SSE consumers can confirm the
+    # deliberation is live before the first agent.start arrives.
+    event_publisher({
+        "type": "run.start", "run_id": run_id, "startup_idea": startup_idea,
+    })
     engine = _build_engine(run_id, startup_idea, event_publisher)
 
     try:
@@ -115,8 +115,14 @@ def run_deliberation(run_id: str, startup_idea: str, event_publisher) -> dict:
     except Exception as e:
         # Engine already persisted the FAILED state; surface the error to
         # the web layer so it can publish a run.failed event.
-        update_run_status(get_session(), run_id, "failed")
-        event_publisher({"type": "run.failed", "run_id": run_id, "error": repr(e)})
+        partial = bool(engine.state.r1_outputs)
+        update_run_status(get_session(), run_id, "partial" if partial else "failed")
+        event_publisher({
+            "type": "run.failed",
+            "run_id": run_id,
+            "error": repr(e),
+            "partial": partial,
+        })
         raise
 
     report = engine.state.r3_report
@@ -136,6 +142,11 @@ def resume_deliberation(run_id: str, event_publisher) -> dict:
     engine = _build_engine(run_id, run.startup_idea, event_publisher)
 
     update_run_status(get_session(), run_id, "running")
+    # Mirror run.start for the resume path so consumers can tell the
+    # run has been picked up by a fresh worker.
+    event_publisher({
+        "type": "run.start", "run_id": run_id, "startup_idea": run.startup_idea,
+    })
 
     # Capture r1_outputs pre-resume for the legacy column
     pre_r1 = dict(engine.state.r1_outputs)
@@ -143,8 +154,14 @@ def resume_deliberation(run_id: str, event_publisher) -> dict:
     try:
         report = engine.resume()
     except Exception as e:
-        update_run_status(get_session(), run_id, "failed")
-        event_publisher({"type": "run.failed", "run_id": run_id, "error": repr(e)})
+        partial = bool(engine.state.r1_outputs)
+        update_run_status(get_session(), run_id, "partial" if partial else "failed")
+        event_publisher({
+            "type": "run.failed",
+            "run_id": run_id,
+            "error": repr(e),
+            "partial": partial,
+        })
         raise
 
     # If R1 finished during resume, persist the legacy column

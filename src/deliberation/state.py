@@ -42,6 +42,10 @@ class EngineState(BaseModel):
     r2_challenges: list[dict] = Field(default_factory=list)
     r2_completed_agents: list[str] = Field(default_factory=list)
     r3_report: dict | None = None
+    # R2-B (response sub-round) bookkeeping. Both default to empty so
+    # legacy checkpoint JSON (without these fields) still loads.
+    r2_resolved_challenge_ids: list[str] = Field(default_factory=list)
+    r2b_completed_targets: list[str] = Field(default_factory=list)
     error: str | None = None
     updated_at: str = Field(default_factory=_now_iso)
 

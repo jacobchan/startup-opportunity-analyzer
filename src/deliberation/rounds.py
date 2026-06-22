@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 ROUND_ORDER = ["round1", "round2", "round3"]

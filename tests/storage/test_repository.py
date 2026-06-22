@@ -3,7 +3,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from src.storage.db import init_db
-from src.storage.models import Run, Evidence, Challenge
+from src.storage.models import Evidence, Challenge
 from src.storage.repository import (
     create_run, get_run, update_run_status,
     add_evidence, get_evidence,
@@ -67,8 +67,8 @@ def test_evidence_dedup_by_url_hash(db_session):
 
 
 def test_list_runs_returns_most_recent_first(db_session):
-    r1 = create_run(db_session, startup_idea="first")
-    r2 = create_run(db_session, startup_idea="second")
+    create_run(db_session, startup_idea="first")
+    create_run(db_session, startup_idea="second")
     from src.storage.repository import list_runs
     runs, total = list_runs(db_session, limit=10, offset=0)
     assert len(runs) == 2
@@ -88,7 +88,6 @@ def test_delete_run_removes_run_and_cascades(db_session):
     run = create_run(db_session, startup_idea="x")
     run_id = run.run_id
     from src.storage.repository import delete_run, add_evidence, add_challenge, get_run
-    from src.storage.models import Evidence, Challenge
     ev = add_evidence(db_session, run_id=run_id, source_type="search",
                       query="q", url=None, title=None, content_excerpt="c", url_hash="h1")
     ch = add_challenge(db_session, run_id=run_id, issuer="a", target="b", claim="c", reason="r")

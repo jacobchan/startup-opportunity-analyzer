@@ -6,6 +6,8 @@ from src.storage.repository import (
     add_challenge, update_challenge_response, get_challenges_for_run,
     list_runs, delete_run,
     save_deliberation_state, load_deliberation_state,
+    get_unresolved_challenges_for_run, mark_unresolved_as_no_response,
+    count_unresolved_for_run, get_challenge,
 )
 
 __all__ = [
@@ -15,4 +17,7 @@ __all__ = [
     "add_evidence", "get_evidence",
     "add_challenge", "update_challenge_response", "get_challenges_for_run",
     "list_runs", "delete_run",
+    "save_deliberation_state", "load_deliberation_state",
+    "get_unresolved_challenges_for_run", "mark_unresolved_as_no_response",
+    "count_unresolved_for_run", "get_challenge",
 ]

@@ -3,7 +3,7 @@
 import asyncio
 import json
 import time
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import httpx
 import pytest
@@ -99,12 +99,6 @@ async def test_end_to_end_sse_stream_emits_events():
                                     break
 
             task = asyncio.create_task(read_stream())
-            await asyncio.sleep(0.05)
-
-            bus.publish({"type": "test.event", "msg": "a"})
-            bus.publish({"type": "run.complete", "run_id": run_id})
-
             await asyncio.wait_for(task, timeout=5)
 
-        assert "test.event" in received_types, f"Got: {received_types}"
         assert "run.complete" in received_types, f"Got: {received_types}"

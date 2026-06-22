@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from src.storage import load_deliberation_state, save_deliberation_state
 
-from .state import EngineState, ROUND_NONE
+from .state import EngineState
 
 
 class CheckpointStore:

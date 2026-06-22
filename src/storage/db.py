@@ -5,13 +5,16 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 Base = declarative_base()
 _engine = None
 _SessionLocal = None
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 def get_engine(db_path: str | None = None):
     global _engine
     if _engine is None:
         if db_path is None:
-            db_path = str(Path("data") / "analyzer.db")
+            # Keep history stable even when uvicorn/CLI is launched from a
+            # different working directory.
+            db_path = str(_PROJECT_ROOT / "data" / "analyzer.db")
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         _engine = create_engine(
             f"sqlite:///{db_path}",

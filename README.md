@@ -6,7 +6,7 @@
 
 ## 核心特性
 
-- **3 轮 deliberation 机制**：第 1 轮 4 个 worker 独立分析 → 第 2 轮交叉挑战 → 第 3 轮战略汇总。避免单 Agent 视角偏差
+- **3 轮 deliberation 机制**：第 1 轮 4 个 worker 独立分析 → 第 2 轮交叉辩论（发起 + 回应两个子回合，每个被挑战的 agent 必须对所有 challenge 给出 accepted/rejected/modified 裁决）→ 第 3 轮战略汇总（强制在 key_risks 显式 cite 至少 1 个被接受/修正的挑战）。避免单 Agent 视角偏差
 - **状态化引擎**：每完成一个 agent 即 checkpoint 写入 SQLite，崩溃后能从断点继续而非从头重跑
 - **Web 端产品**：FastAPI + React + SSE 实时推送 + 历史列表 + URL 持久化
 - **证据可追溯**：搜索/抓取结果落库到 `Evidence` 表，报告里 `ev-xxx` 引用一键查原文

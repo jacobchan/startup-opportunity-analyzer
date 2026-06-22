@@ -102,9 +102,64 @@ def update_challenge_response(
     return ch
 
 
+def get_challenge(session: Session, challenge_id: str) -> Challenge | None:
+    """Look up a single challenge by id."""
+    return session.get(Challenge, challenge_id)
+
+
 def get_challenges_for_run(session: Session, run_id: str) -> list[Challenge]:
+    """All challenges for a run, ordered by issued_at."""
     stmt = select(Challenge).where(Challenge.run_id == run_id).order_by(Challenge.issued_at)
     return list(session.execute(stmt).scalars())
+
+
+def get_unresolved_challenges_for_run(
+    session: Session, run_id: str, target: str | None = None,
+) -> list[Challenge]:
+    """Return challenges with ``response IS NULL``.
+
+    If ``target`` is given, restrict to challenges targeting that agent.
+    Used by R2-B to decide which agents still have open work.
+    """
+    stmt = (
+        select(Challenge)
+        .where(Challenge.run_id == run_id, Challenge.response.is_(None))
+        .order_by(Challenge.issued_at)
+    )
+    if target is not None:
+        stmt = stmt.where(Challenge.target == target)
+    return list(session.execute(stmt).scalars())
+
+
+def mark_unresolved_as_no_response(
+    session: Session, run_id: str, target: str,
+) -> int:
+    """Fill ``verdict='no_response' / resolved_at=now`` for every challenge
+    in this run targeting ``target`` that still has ``response IS NULL``.
+
+    Returns the number of rows updated. Used as the R2-B safety net: if the
+    LLM finished its kickoff without calling ``respond`` for some challenges,
+    we still mark them as no_response so R3 always sees a complete disposition.
+    """
+    rows = get_unresolved_challenges_for_run(
+        session=session, run_id=run_id, target=target,
+    )
+    now = datetime.now(timezone.utc)
+    for ch in rows:
+        ch.verdict = "no_response"
+        ch.resolved_at = now
+    if rows:
+        session.commit()
+    return len(rows)
+
+
+def count_unresolved_for_run(session: Session, run_id: str) -> int:
+    """Return the number of challenges in this run that still have ``response IS NULL``."""
+    stmt = (
+        select(func.count(Challenge.challenge_id))
+        .where(Challenge.run_id == run_id, Challenge.response.is_(None))
+    )
+    return int(session.execute(stmt).scalar_one())
 
 
 def list_runs(session: Session, limit: int = 10, offset: int = 0) -> tuple[list[Run], int]:

@@ -11,6 +11,7 @@ from src.web.run_registry import registry
 from src.web.runner import run_deliberation
 
 router = APIRouter(prefix="/runs", tags=["runs"])
+TERMINAL_BUS_GRACE_SECONDS = 30
 
 
 class CreateRunRequest(BaseModel):
@@ -28,13 +29,19 @@ async def create_run_endpoint(req: CreateRunRequest, background_tasks: Backgroun
 
 async def _run_in_background(run_id: str, startup_idea: str, bus: EventBus) -> None:
     loop = asyncio.get_event_loop()
-    await loop.run_in_executor(
-        None,
-        run_deliberation,
-        run_id,
-        startup_idea,
-        bus.publish,
-    )
+    try:
+        await loop.run_in_executor(
+            None,
+            run_deliberation,
+            run_id,
+            startup_idea,
+            bus.publish,
+        )
+    finally:
+        # Publishing is synchronous: existing subscribers already have the
+        # terminal event in their queues. Keep the lookup alive briefly so a
+        # client that connects just after a very fast run can still attach.
+        loop.call_later(TERMINAL_BUS_GRACE_SECONDS, registry.release, run_id)
 
 
 @router.get("")
@@ -80,6 +87,7 @@ async def get_run_endpoint(run_id: str):
         "created_at": run.created_at.isoformat() if run.created_at else None,
         "completed_at": run.completed_at.isoformat() if run.completed_at else None,
         "round1_outputs": run.round1_outputs,
+        "deliberation_state": run.deliberation_state,
     }
 
 

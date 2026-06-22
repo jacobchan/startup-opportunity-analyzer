@@ -174,3 +174,10 @@ class StrategyReportOutput(BaseModel):
     mvp_scope: str = Field(description="建议的MVP范围")
     funding_estimate: str = Field(description="启动阶段资金需求估算")
     final_confidence: str = Field(description="信心度（高/中/低）及理由")
+    challenge_disposition: dict = Field(
+        default_factory=dict,
+        description=(
+            "R2 交叉挑战的处置结果分组，键为 accepted/rejected/modified/no_response，"
+            "值为 [{challenge_id, claim, response, issuer}, ...] 形式的列表。"
+        ),
+    )

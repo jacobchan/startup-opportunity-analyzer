@@ -54,7 +54,8 @@ describe('HistoryList', () => {
     const onRerun = vi.fn()
     render(<HistoryList onRerun={onRerun} onViewRun={vi.fn()} />)
     await waitFor(() => screen.getByText(/AI Agent/))
-    fireEvent.click(screen.getAllByText('重跑')[0])
+    fireEvent.click(screen.getAllByRole('button', { name: '更多操作' })[0])
+    fireEvent.click(screen.getByText('重新分析'))
     expect(onRerun).toHaveBeenCalledWith('AI Agent 平台')
   })
 

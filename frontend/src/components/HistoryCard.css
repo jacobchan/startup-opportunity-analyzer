@@ -1,0 +1,243 @@
+.history-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  min-height: 112px;
+  padding: 22px 24px;
+  border: 1px solid #e8e8e8;
+  border-radius: 16px;
+  background: #fff;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.history-card:hover {
+  border-color: #d2d2d2;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.045);
+  transform: translateY(-1px);
+}
+
+.history-card__content {
+  flex: 1;
+  min-width: 0;
+}
+
+.history-card__heading {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 10px;
+}
+
+.history-card__title {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: #1d1d1f;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-card__badge {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.history-card__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.history-card__badge--running {
+  color: #2563eb;
+  background: #eff6ff;
+}
+
+.history-card__badge--running .history-card__dot {
+  animation: history-pulse 1.8s ease-in-out infinite;
+}
+
+.history-card__badge--queued {
+  color: #667085;
+  background: #f2f4f7;
+}
+
+.history-card__badge--success {
+  color: #08783e;
+  background: #edf8f2;
+}
+
+.history-card__badge--warning {
+  color: #a14b06;
+  background: #fff5e8;
+}
+
+.history-card__badge--danger {
+  color: #c22f2f;
+  background: #fff0f0;
+}
+
+.history-card__summary {
+  max-width: 640px;
+  margin: 8px 0 0;
+  overflow: hidden;
+  color: #737377;
+  font-size: 13px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-card__time {
+  display: block;
+  margin-top: 6px;
+  color: #a1a1a6;
+  font-size: 12px;
+}
+
+.history-card__actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+}
+
+.history-card__open,
+.history-card__more-button {
+  border: 0;
+  background: transparent;
+  color: #1d1d1f;
+  cursor: pointer;
+  font: inherit;
+}
+
+.history-card__open {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 8px;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.history-card__open span {
+  color: #86868b;
+  font-size: 20px;
+  font-weight: 400;
+  line-height: 0;
+  transform: translateY(-1px);
+}
+
+.history-card__open:hover {
+  background: #f5f5f7;
+}
+
+.history-card__open:focus-visible,
+.history-card__more-button:focus-visible,
+.history-card__menu button:focus-visible {
+  outline: 2px solid rgba(0, 113, 227, 0.45);
+  outline-offset: 2px;
+}
+
+.history-card__more {
+  position: relative;
+}
+
+.history-card__more-button {
+  width: 38px;
+  height: 38px;
+  padding: 0 0 6px;
+  border-radius: 50%;
+  color: #86868b;
+  font-size: 15px;
+  letter-spacing: 1px;
+}
+
+.history-card__more-button:hover,
+.history-card__more-button[aria-expanded='true'] {
+  background: #f5f5f7;
+  color: #1d1d1f;
+}
+
+.history-card__menu {
+  position: absolute;
+  z-index: 10;
+  top: 44px;
+  right: 0;
+  width: 132px;
+  padding: 6px;
+  border: 1px solid #e5e5e5;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
+}
+
+.history-card__menu button {
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #1d1d1f;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+}
+
+.history-card__menu button:hover {
+  background: #f5f5f7;
+}
+
+.history-card__menu .history-card__delete {
+  color: #d92d20;
+}
+
+@keyframes history-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+@media (max-width: 640px) {
+  .history-card {
+    align-items: flex-start;
+    gap: 10px;
+    min-height: 0;
+    padding: 18px;
+  }
+
+  .history-card__heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .history-card__title {
+    width: 100%;
+  }
+
+  .history-card__open {
+    padding-inline: 4px;
+  }
+
+  .history-card__open span {
+    display: none;
+  }
+}

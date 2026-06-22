@@ -9,6 +9,7 @@ from src.web.runner import resume_deliberation
 
 
 router = APIRouter(prefix="/runs", tags=["resume"])
+TERMINAL_BUS_GRACE_SECONDS = 30
 
 
 @router.post("/{run_id}/resume")
@@ -32,9 +33,12 @@ async def resume_run_endpoint(run_id: str, background_tasks: BackgroundTasks):
 async def _resume_in_background(run_id: str, bus: EventBus) -> None:
     import asyncio
     loop = asyncio.get_event_loop()
-    await loop.run_in_executor(
-        None,
-        resume_deliberation,
-        run_id,
-        bus.publish,
-    )
+    try:
+        await loop.run_in_executor(
+            None,
+            resume_deliberation,
+            run_id,
+            bus.publish,
+        )
+    finally:
+        loop.call_later(TERMINAL_BUS_GRACE_SECONDS, registry.release, run_id)

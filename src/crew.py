@@ -19,9 +19,7 @@ from crewai.project import CrewBase, agent, task, crew, before_kickoff, after_ki
 
 from src.tools.search_tool import search_tool
 from src.tools.web_scraper import scrape_tool
-from src.tools.challenge_tool import make_challenge_tool
-from src.config.settings import LLM_MODEL, DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL
-from src.storage import get_session, get_challenges_for_run
+from src.config.settings import LLM_MODEL, build_llm
 
 
 def _extract_json(text: str) -> str:
@@ -49,15 +47,10 @@ def _parse_json(text: str) -> dict:
         return {"raw_output": str(text), "parse_error": True}
 
 
+# ``_get_llm`` is retained as a thin alias to the shared factory so
+# older callers and tests keep working without a behaviour change.
 def _get_llm() -> LLM:
-    """根据配置创建LLM实例，支持DeepSeek和Claude"""
-    if "deepseek" in LLM_MODEL:
-        return LLM(
-            model=LLM_MODEL,
-            api_key=DEEPSEEK_API_KEY,
-            base_url=DEEPSEEK_BASE_URL,
-        )
-    return LLM(model=LLM_MODEL)
+    return build_llm()
 
 
 @CrewBase

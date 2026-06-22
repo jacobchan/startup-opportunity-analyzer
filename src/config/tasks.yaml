@@ -14,7 +14,6 @@ market_analysis:
     - 不要在JSON前后加任何解释文字
     - 字符串值使用中文，所有字段都必须填写
     {
-    {
       "startup_idea": "创业方向",
       "tam_sam_som": {
         "tam": {"value": "数值", "source": "来源", "year": "年份"},
@@ -56,7 +55,6 @@ competitor_analysis:
     - 只输出JSON本身，不要用markdown代码块（不要```或```json）包裹
     - 不要在JSON前后加任何解释文字
     - 字符串值使用中文，所有字段都必须填写
-    {
     {
       "startup_idea": "创业方向",
       "competitors": [
@@ -108,7 +106,6 @@ finance_analysis:
     - 只输出JSON本身，不要用markdown代码块（不要```或```json）包裹
     - 不要在JSON前后加任何解释文字
     - 字符串值使用中文，所有字段都必须填写
-    {
     {
       "startup_idea": "创业方向",
       "revenue_model": "推荐收入模式",
@@ -173,7 +170,6 @@ risk_review:
     - 不要在JSON前后加任何解释文字
     - 字符串值使用中文，所有字段都必须填写
     {
-    {
       "startup_idea": "创业方向",
       "risks": [
         {
@@ -204,12 +200,14 @@ strategy_report:
     5. 关键风险提示（Top 3风险及应对）
     6. 下一步行动建议（如果Go，建议的MVP范围和验证计划）
     7. 启动阶段资金需求估算
+
+    8. **挑战处置摘要 (challenge_disposition)**: 必须把下方 R2 交叉辩论中所有挑战按裁决分桶列出,每条保留 challenge_id / claim / response / issuer。
+    9. **关键风险 (key_risks) 必须显式引用挑战**: 至少 1 条风险以 "[ch-xxx]" 形式 cite 一个 verdict 为 accepted 或 modified 的 challenge_id。
   expected_output: >
     严格按以下JSON Schema输出，且必须是合法JSON。重要规则：
     - 只输出JSON本身，不要用markdown代码块（不要```或```json）包裹
     - 不要在JSON前后加任何解释文字
     - 字符串值使用中文，所有字段都必须填写
-    {
     {
       "startup_idea": "创业方向",
       "decision": "Go/No-Go/Conditional-Go",
@@ -224,7 +222,13 @@ strategy_report:
       ],
       "mvp_scope": "建议MVP范围",
       "funding_estimate": "启动阶段资金需求",
-      "final_confidence": "信心度（高/中/低）及理由"
+      "final_confidence": "信心度（高/中/低）及理由",
+      "challenge_disposition": {
+        "accepted":  [{"challenge_id": "ch-xxx", "claim": "...", "response": "...", "issuer": "..."}],
+        "rejected":  [{"challenge_id": "ch-xxx", "claim": "...", "response": "...", "issuer": "..."}],
+        "modified":  [{"challenge_id": "ch-xxx", "claim": "...", "response": "...", "issuer": "..."}],
+        "no_response": [{"challenge_id": "ch-xxx", "claim": "...", "response": "", "issuer": "..."}]
+      }
     }
   agent: strategy_advisor
 
@@ -246,4 +250,26 @@ round2_challenge:
     - target: 被挑战的 agent 名
     - claim: 具体被挑战的论断
     - reason: 挑战理由（引用其他 agent 的字段或你自己的依据）
+  agent: market_analyst
+
+round2_respond:
+  description: >
+    第二轮（回应回合）：你刚被其他 agent 挑战。创业方向：{startup_idea}
+
+    以下是别人对你的、未回应的挑战（按时间顺序）：
+    {open_challenges_for_me}
+
+    你的任务：
+    1. 仔细阅读每条挑战的 issuer / claim / reason
+    2. **必须**为每一条挑战调用 challenge 工具的 respond 动作
+       （action="respond"，传 challenge_id, response, verdict）
+       不能跳过任何一条
+    3. verdict 必须是以下三选一：
+       - accepted：你承认挑战成立，撤回或修正原结论
+       - rejected：你不同意挑战，坚持原结论
+       - modified：你承认挑战中部分合理，给出修正后的结论
+    4. 回应完成后用一句中文总结你做了哪些修正
+  expected_output: >
+    你的回应必须包含与上方挑战列表条数一致的 respond 调用。
+    每条挑战对应一次 respond，verdict 取值只能为 accepted/rejected/modified。
   agent: market_analyst
